@@ -1,0 +1,47 @@
+# A single COLD sandbox (no templates, no warm pool) — requirement (7).
+# Use it to validate the gVisor pool cheaply (CPU image, no GPU):
+#   kubectl apply -f sandbox-example.yaml
+#   kubectl -n skyrl-sandboxes get pods -w
+#   kubectl -n skyrl-sandboxes exec <pod> -- sh -c 'uname -a; whoami'
+#
+# For the real integration, the AgentSandboxEnvironment creates one of these per
+# trajectory with the per-instance SWE-bench image instead of python:3.11-slim,
+# then `kubectl exec`s the agent's bash commands into it.
+#
+# NOTE: namespace must match SANDBOX_NAMESPACE in .env (default below).
+apiVersion: agents.x-k8s.io/v1beta1
+kind: Sandbox
+metadata:
+  name: cold-sandbox-example
+  namespace: skyrl-sandboxes
+spec:
+  podTemplate:
+    spec:
+      # (3) force gVisor isolation + pin to the sandbox pool.
+      runtimeClassName: gvisor
+      nodeSelector:
+        sandbox.gke.io/runtime: gvisor
+      tolerations:
+      - key: sandbox.gke.io/runtime
+        operator: Equal
+        value: gvisor
+        effect: NoSchedule
+      # Untrusted code must NOT receive a Kubernetes API token.
+      automountServiceAccountToken: false
+      restartPolicy: OnFailure
+      containers:
+      - name: sandbox
+        image: python:3.11-slim            # swap for the per-instance SWE-bench image
+        # Keep the pod alive so we can `kubectl exec` into it (mirrors how
+        # mini-swe-agent's DockerEnvironment runs `sleep` then `docker exec`).
+        command: ["sleep", "infinity"]
+        workingDir: /testbed
+        resources:
+          requests:
+            cpu: "250m"
+            memory: "512Mi"
+            ephemeral-storage: "1Gi"
+          limits:
+            cpu: "2"
+            memory: "4Gi"
+            ephemeral-storage: "8Gi"

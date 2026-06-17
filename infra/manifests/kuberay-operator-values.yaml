@@ -1,0 +1,14 @@
+# Helm values for the kuberay-operator chart.
+# nodeSelector is also set via --set-string in 03-install-kuberay.sh so it can
+# follow ${DEFAULT_POOL_NAME} from .env; the value here is the fallback.
+nodeSelector:
+  cloud.google.com/gke-nodepool: default-pool
+
+# The operator is a lightweight controller — keep its footprint small.
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi

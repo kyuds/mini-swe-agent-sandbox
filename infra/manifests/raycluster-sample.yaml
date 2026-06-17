@@ -1,0 +1,70 @@
+# Sample RayCluster — APPLY LATER, only when you have GPU quota.
+# Head runs on the small default pool; GPU workers schedule onto kuberay-gpu-pool
+# (matching its label + tolerating its taints). Workers start at 0 replicas so
+# nothing GPU-billable spins up until SkyRL scales them.
+#
+#   kubectl apply -f raycluster-sample.yaml
+#
+# Match rayVersion/image to the Ray version SkyRL uses. Pin images explicitly.
+apiVersion: ray.io/v1
+kind: RayCluster
+metadata:
+  name: skyrl-raycluster
+  namespace: skyrl
+spec:
+  rayVersion: "2.9.0"
+  headGroupSpec:
+    rayStartParams:
+      dashboard-host: "0.0.0.0"
+    template:
+      spec:
+        # The head drives sandbox lifecycle/exec → run it as the RBAC identity.
+        serviceAccountName: skyrl-sandbox-runner
+        nodeSelector:
+          cloud.google.com/gke-nodepool: default-pool
+        containers:
+        - name: ray-head
+          image: rayproject/ray:2.9.0
+          resources:
+            requests:
+              cpu: "2"
+              memory: "8Gi"
+            limits:
+              cpu: "4"
+              memory: "12Gi"
+          ports:
+          - { containerPort: 6379, name: gcs }
+          - { containerPort: 8265, name: dashboard }
+          - { containerPort: 10001, name: client }
+  workerGroupSpecs:
+  - groupName: gpu-workers
+    replicas: 0
+    minReplicas: 0
+    maxReplicas: 4
+    rayStartParams: {}
+    template:
+      spec:
+        # Workers also create/exec sandboxes → same identity.
+        serviceAccountName: skyrl-sandbox-runner
+        # (2) land on the GPU pool: match its label, tolerate its taints.
+        nodeSelector:
+          workload: ray-gpu
+        tolerations:
+        - key: workload
+          operator: Equal
+          value: ray-gpu
+          effect: NoSchedule
+        - key: nvidia.com/gpu        # GKE's automatic GPU-node taint
+          operator: Exists
+          effect: NoSchedule
+        containers:
+        - name: ray-worker
+          image: rayproject/ray:2.9.0-gpu
+          resources:
+            requests:
+              cpu: "4"
+              memory: "16Gi"
+            limits:
+              nvidia.com/gpu: 1      # request the GPU(s); set to GPU_PER_NODE
+              cpu: "8"
+              memory: "32Gi"

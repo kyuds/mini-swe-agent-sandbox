@@ -1,0 +1,5 @@
+# Rendered from .env + sample manifests by the scripts (05, 07).
+manifests/*.generated.yaml
+
+# Local config copy (also matched by the repo-root .gitignore).
+.env
