@@ -1,0 +1,100 @@
+[project]
+name = "mini-swe-agent-sandbox"
+version = "0.1.0"
+description = "Run mini-swe-agent's SWE-bench RL workload (SkyRL) on kubernetes-sigs/agent-sandbox instead of Podman."
+readme = "README.md"
+requires-python = ">=3.11"
+# Light deps the glue code always needs (env backend + dataset prep work without the GPU stack).
+dependencies = [
+    "kubernetes>=27.2.0",
+    # The copied SkyRL example/adapter targets the mini-swe-agent 1.x API (string `execute()`,
+    # tuple `run()`, `get_observation`/`parse_action` hooks). 2.x is a breaking change.
+    "mini-swe-agent>=1.12.0,<2",
+    "litellm",
+    "datasets>=4.0.0",
+]
+
+[project.optional-dependencies]
+# The SkyRL training backend (heavy, linux/GPU). `uv sync --extra fsdp`.
+# We pull SkyRL from PyPI per "pip install skyrl". NOTE: the copied example code (main.py/
+# generator.py) imports SkyRL's current module layout (`skyrl.train.*`,
+# `skyrl.backends.skyrl_train.*`); pin to a skyrl version that provides it. If the PyPI release
+# lags, use the git source commented in [tool.uv.sources] below.
+fsdp = ["skyrl[fsdp]"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["mini_swe_agent_sandbox"]
+
+# ---------------------------------------------------------------------------------------------------
+# [tool.uv] mirrors the fsdp-relevant slice of SkyRL's own resolution config
+# (NovaSky-AI/SkyRL pyproject @ 6c300c75) so `skyrl[fsdp]`'s torch/vllm/flash-attn/flashinfer stack
+# resolves the same way here. These are workspace settings (not carried in PyPI metadata), so they
+# must live in the consuming project. Keep in sync with SkyRL. Run `uv lock` / `uv sync --extra fsdp`
+# on the target (linux/GPU) -- not run/verified here.
+# ---------------------------------------------------------------------------------------------------
+[tool.uv]
+required-environments = [
+    "sys_platform == 'linux'",
+    "sys_platform == 'darwin' and platform_machine == 'arm64'",
+]
+constraint-dependencies = [
+    "flashinfer-jit-cache==0.6.8.post1",
+    "flashinfer-cubin==0.6.8.post1",
+]
+override-dependencies = [
+    # `nixl` hard-depends on both nixl-cu12 and nixl-cu13; drop the cu13 variant so it doesn't pull
+    # the CUDA-13 stack and bump torch off the cu12 pin.
+    "nixl-cu13; sys_platform == 'never'",
+]
+
+[tool.uv.extra-build-dependencies]
+flash-attn = [{ requirement = "torch", match-runtime = true }]
+
+[tool.uv.extra-build-variables]
+flash-attn = { FLASH_ATTENTION_SKIP_CUDA_BUILD = "TRUE" }
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "flashinfer-cu128"
+url = "https://flashinfer.ai/whl/cu128"
+explicit = true
+
+[[tool.uv.index]]
+name = "vllm-cu129"
+url = "https://wheels.vllm.ai/0.20.2/cu129"
+explicit = true
+
+[tool.uv.sources]
+# Uncomment to pin SkyRL to the source whose example code this repo copied (use if PyPI lags):
+# skyrl = { git = "https://github.com/NovaSky-AI/SkyRL.git", rev = "6c300c75" }
+flashinfer-jit-cache = { index = "flashinfer-cu128", marker = "sys_platform == 'linux'" }
+vllm = [{ index = "vllm-cu129", marker = "sys_platform == 'linux'" }]
+flash-attn = { url = "https://github.com/erictang000/flash-attention/releases/download/v2.8.3-torch2.11-clean/flash_attn-2.8.3-cp312-cp312-linux_x86_64.whl", marker = "sys_platform == 'linux' and python_version == '3.12' and platform_machine == 'x86_64'" }
+torch = [
+    { index = "pytorch-cu128", marker = "sys_platform == 'linux'" },
+    { index = "pytorch-cpu", marker = "sys_platform == 'darwin'" },
+]
+torchvision = [
+    { index = "pytorch-cu128", marker = "sys_platform == 'linux'" },
+    { index = "pytorch-cpu", marker = "sys_platform == 'darwin'" },
+]
+vllm-router = [
+    { url = "https://github.com/SumanthRH/router/releases/download/0.1.14.post1/vllm_router-0.1.14-cp38-abi3-manylinux_2_35_x86_64.whl", marker = "sys_platform == 'linux' and platform_machine == 'x86_64'" },
+    { url = "https://github.com/SumanthRH/router/releases/download/0.1.14.post1/vllm_router-0.1.14-cp38-abi3-linux_aarch64.whl", marker = "sys_platform == 'linux' and platform_machine == 'aarch64'" },
+]
+
+[tool.black]
+line-length = 120
