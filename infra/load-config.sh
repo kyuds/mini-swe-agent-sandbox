@@ -32,6 +32,7 @@ _load_env_file() {
     val="${val#\'}"; val="${val%\'}"
     [ -z "${!key+x}" ] && export "$key=$val"     # set only if unset
   done < "$f"
+  return 0   # don't let the loop's last status (a false `&&` test) propagate & trip `set -e` in callers
 }
 
 # .env (local overrides) wins over .env.example (committed defaults).
