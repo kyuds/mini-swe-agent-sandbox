@@ -22,8 +22,10 @@ and edited** to use the agent-sandbox backend.
 | `configs/` | `swebench_agent_sandbox.yaml` (task config wired to the backend) + `litellm.json`. |
 | `.env.miniswe` | `OPENAI_BASE_URL` (inference endpoint) + `LITELLM_MODEL_REGISTRY_PATH`. |
 | `scripts/run_mini_swe_agent_sandbox.sh` | One-command launcher (`uv run ... -m mini_swe_agent_sandbox.main`). |
-| `infra/` | GKE cluster, KubeRay, agent-sandbox controller, gVisor sandbox pool, RBAC (`up.sh` / `teardown.sh`). |
-| `docs/` | `port-plan.md` (design + self-review) and `port-guided.md` (implementation walkthrough). |
+| `scripts/smoke_test_agent_sandbox.py` | **CPU-only smoke test** — proves the backend works on a real cluster without SkyRL/GPUs. |
+| `scripts/run_smoke_in_pod.sh` | Runs the smoke test from an in-cluster pod **as the runner SA** (so it exercises RBAC). |
+| `infra/` | GKE cluster, KubeRay, agent-sandbox controller, gVisor pool, RBAC (`up.sh`); **`up-smoke.sh`** / **`teardown-smoke.sh`** = CPU+gVisor subset for testing. |
+| `docs/` | `port-plan.md`, `port-guided.md`, and `testing-agent-sandbox.md` (how to validate the backend). |
 
 ## What's different from SkyRL's example
 
@@ -72,6 +74,21 @@ uv run python -m mini_swe_agent_sandbox.preprocess --output_dir ~/data/swe_gym_s
 # 4. Train
 bash scripts/run_mini_swe_agent_sandbox.sh
 ```
+
+## Testing the agent-sandbox part (no GPUs)
+Validate the whole sandbox contract on a cheap **CPU** cluster — no H100s, no SkyRL training:
+```bash
+cd infra && ASSUME_YES=1 ./up-smoke.sh    # CPU cluster + gVisor sandbox pool + agent-sandbox + RBAC (no GPU/KubeRay)
+cd .. && bash scripts/run_smoke_in_pod.sh # run the test IN-CLUSTER as the runner SA (RBAC + gVisor exercised)
+# teardown when done:  ASSUME_YES=1 infra/teardown-smoke.sh
+```
+`run_smoke_in_pod.sh` spins up a pod running as `skyrl-sandbox-runner`, syncs this repo in, and runs the
+test there (gVisor on by default) — so create → `execute()` → cleanup is driven exactly as a SkyRL Ray
+worker would (in-cluster token + RBAC, sandboxes on the gVisor pool), minus the GPU/LLM half. A quick
+laptop check (which **bypasses** RBAC) is
+`uv run python scripts/smoke_test_agent_sandbox.py --namespace default`. See
+`docs/testing-agent-sandbox.md` for the manual ssh/rsync steps, the phase → SkyRL-usage map, and a
+`kubectl` fallback.
 
 ## Status
 Backend + wiring implemented and statically validated (compile; import of the backend against real

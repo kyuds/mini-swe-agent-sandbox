@@ -1,0 +1,30 @@
+# A CPU "runner" pod that stands in for a SkyRL Ray worker. It runs as the SANDBOX_RUNNER_SA identity,
+# so running the smoke test *inside this pod* exercises the real control-plane path: in-cluster
+# ServiceAccount token + RBAC (unlike a laptop run, which uses your admin kubeconfig and bypasses RBAC).
+#
+# Lands on the default node pool (no nodeSelector). Has uv + python preinstalled; we tar the repo in and
+# `uv run` the smoke test (see scripts/run_smoke_in_pod.sh).
+#
+# NOTE: namespace + serviceAccountName below assume the infra/.env defaults
+#       (RAY_NAMESPACE=skyrl, SANDBOX_RUNNER_SA=skyrl-sandbox-runner). Edit if you changed them.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: smoke-runner
+  namespace: skyrl                         # = RAY_NAMESPACE (where the SA lives)
+  labels:
+    app: agent-sandbox-smoke-runner
+spec:
+  serviceAccountName: skyrl-sandbox-runner # = SANDBOX_RUNNER_SA — the identity under test
+  restartPolicy: Never
+  containers:
+    - name: runner
+      image: ghcr.io/astral-sh/uv:python3.12-bookworm   # uv + python3.12 + tar preinstalled
+      command: ["sleep", "infinity"]
+      workingDir: /workspace
+      env:
+        - name: UV_LINK_MODE
+          value: copy
+      resources:
+        requests: { cpu: "250m", memory: "512Mi" }
+        limits: { cpu: "1", memory: "1Gi" }
