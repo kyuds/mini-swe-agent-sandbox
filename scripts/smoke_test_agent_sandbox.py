@@ -16,7 +16,6 @@ Useful flags:
     --image IMG          container image (default python:3.11-slim; any image with bash works)
     --namespace NS       namespace for the Sandbox (default skyrl-sandboxes; use one you can write to)
     --cwd DIR            working dir (default /tmp; SWE-bench images use /testbed)
-    --api-version VER    Sandbox CRD served version (default v1beta1; try v1alpha1 if create 404s)
     --gvisor             pin to the gVisor pool (only if infra step 02 sandbox pool exists)
     --keep               leave the Sandbox running at the end for manual `kubectl exec` inspection
 """
@@ -24,6 +23,10 @@ Useful flags:
 import argparse
 import sys
 import time
+
+# Independent Kubernetes client (the agent-sandbox SDK's helper) used only to confirm CR deletion at
+# the end — querying separately from the env that did the delete is the more honest GC check.
+from k8s_agent_sandbox.k8s_helper import K8sHelper
 
 # Construct via mini-swe-agent's factory when available (exercises the real dotted-path wiring);
 # fall back to importing the class directly so the test still runs without mini-swe-agent installed.
@@ -62,7 +65,6 @@ def main() -> int:
     ap.add_argument("--image", default="python:3.11-slim")
     ap.add_argument("--namespace", default="skyrl-sandboxes")
     ap.add_argument("--cwd", default="/tmp")
-    ap.add_argument("--api-version", default="v1beta1")
     ap.add_argument("--gvisor", action="store_true")
     ap.add_argument("--keep", action="store_true")
     args = ap.parse_args()
@@ -78,7 +80,6 @@ def main() -> int:
         "image": args.image,
         "cwd": args.cwd,
         "namespace": args.namespace,
-        "api_version": args.api_version,
         "resources": {"requests": {"cpu": "100m", "memory": "128Mi", "ephemeral-storage": "256Mi"}},
         "automount_service_account_token": False,
         "sandbox_ready_timeout": 300,
@@ -93,7 +94,8 @@ def main() -> int:
         msg = str(e).lower()
         if "could not find" in msg or "404" in msg or "not found" in msg:
             print("  → Is the agent-sandbox controller + CRD installed? (infra/04-install-agent-sandbox.sh)")
-            print(f"  → Or wrong CRD version: retry with --api-version v1alpha1 (current: {args.api_version}).")
+            print("  → The Sandbox GVK comes from the k8s-agent-sandbox SDK; if the installed CRD serves a")
+            print("    different api version, install a matching SDK version.")
         elif "forbidden" in msg or "403" in msg:
             print(
                 "  → RBAC: your identity can't create sandboxes/pods/exec in this namespace (infra/05-setup-rbac.sh)."
@@ -102,7 +104,7 @@ def main() -> int:
             print(f"  → Pod never Ready. Inspect: kubectl -n {args.namespace} get pods,sandboxes")
             print("  → If you passed --gvisor, ensure the gVisor node pool exists (infra step 02).")
         return 1
-    check("sandbox created + Ready", env._pod_name is not None, f"sandbox={env._sandbox_name} pod={env._pod_name}")
+    check("sandbox created + Ready", env.pod_name is not None, f"sandbox={env.sandbox_name} pod={env.pod_name}")
 
     try:
         print("\n== Phase 2: basic execute() ==")
@@ -173,17 +175,18 @@ def main() -> int:
     finally:
         if args.keep:
             print("\n== Phase 8: cleanup SKIPPED (--keep) ==")
-            print(f"  Sandbox '{env._sandbox_name}' / pod '{env._pod_name}' left running. Inspect with:")
-            print(f"    kubectl -n {args.namespace} get sandbox {env._sandbox_name}")
-            print(f"    kubectl -n {args.namespace} exec -it {env._pod_name} -- bash")
-            print(f"    kubectl -n {args.namespace} delete sandbox {env._sandbox_name}   # when done")
+            print(f"  Sandbox '{env.sandbox_name}' / pod '{env.pod_name}' left running. Inspect with:")
+            print(f"    kubectl -n {args.namespace} get sandbox {env.sandbox_name}")
+            print(f"    kubectl -n {args.namespace} exec -it {env.pod_name} -- bash")
+            print(f"    kubectl -n {args.namespace} delete sandbox {env.sandbox_name}   # when done")
         else:
             print("\n== Phase 8: cleanup() deletes the Sandbox CR ==")
-            name = env._sandbox_name
+            name = env.sandbox_name
             env.cleanup()
+            helper = K8sHelper()  # independent client: confirm the CR is really gone
             gone = False
             for _ in range(30):  # allow the controller a moment to GC
-                if env._get_sandbox(name) is None:
+                if helper.get_sandbox(name, args.namespace) is None:
                     gone = True
                     break
                 time.sleep(1)

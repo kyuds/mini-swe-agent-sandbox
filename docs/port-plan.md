@@ -7,8 +7,9 @@
 > package and edited**; the only diff vs the upstream example is a one-line image-injection branch in
 > `utils.py` for our backend (+ `mini-swe-agent<2` pinned in `pyproject.toml`). Entrypoint: `python -m
 > mini_swe_agent_sandbox.main`. (2) the Sandbox
-> GVK is **`agents.x-k8s.io/v1beta1`** (matching `infra/manifests/sandbox-example.yaml`), and we
-> **dropped the `k8s-agent-sandbox` SDK dep** (its constants say v1alpha1 and lag the deployed CRD);
+> GVK is **`agents.x-k8s.io/v1alpha1`** (the version the installed CRD serves), and we **use the
+> `k8s-agent-sandbox` SDK** (`K8sHelper` + `constants`) for the Sandbox lifecycle so the GVK tracks the
+> install — confirmed on the live cluster (the CRD serves v1alpha1 only; the earlier v1beta1 was wrong);
 > (3) the pod spec now sets **`automountServiceAccountToken: false`** + gVisor `runtimeClassName`/
 > nodeSelector/tolerations per the repo's example; (4) **RBAC/namespaces are handled by
 > `infra/05-setup-rbac.sh`** (`skyrl-sandboxes` ns, `skyrl-sandbox-runner` SA), so no separate

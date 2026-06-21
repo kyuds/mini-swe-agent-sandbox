@@ -230,9 +230,9 @@ environment:
     PIP_PROGRESS_BAR: 'off'
     TQDM_DISABLE: '1'
   # NOTE: isolation/placement default to this repo's gVisor sandbox pool (runtime_class_name=gvisor,
-  # nodeSelector sandbox.gke.io/runtime=gvisor + toleration, automountServiceAccountToken=false) and
-  # api_version=v1beta1 -- see AgentSandboxEnvironmentConfig. Override here only if your cluster differs:
-  # api_version: "v1beta1"
+  # nodeSelector sandbox.gke.io/runtime=gvisor + toleration, automountServiceAccountToken=false) --
+  # see AgentSandboxEnvironmentConfig. The Sandbox GVK comes from the k8s-agent-sandbox SDK (tracks the
+  # installed CRD), so there's no version to set here. Override placement only if your cluster differs:
   # runtime_class_name: null              # disable gVisor (e.g. local KinD smoke test)
   # node_selector: {}
   # tolerations: []

@@ -83,13 +83,13 @@ Fastest "does the env logic work" check; uses your kubeconfig (admin), so it doe
 uv sync
 uv run python scripts/smoke_test_agent_sandbox.py --namespace default
 ```
-Same flags: `--image`, `--cwd`, `--api-version` (default `v1beta1`; try `v1alpha1` if create 404s),
-`--gvisor`, `--keep`.
+Same flags: `--image`, `--cwd`, `--gvisor`, `--keep`. (The Sandbox API version isn't a flag — it comes
+from the k8s-agent-sandbox SDK, which tracks the installed CRD: `agents.x-k8s.io/v1alpha1`.)
 
 ## Method 3 — pure kubectl (eyeball / debug)
 ```bash
 kubectl apply -n default -f - <<'YAML'
-apiVersion: agents.x-k8s.io/v1beta1
+apiVersion: agents.x-k8s.io/v1alpha1
 kind: Sandbox
 metadata: { name: smoke, namespace: default }
 spec:
@@ -107,7 +107,7 @@ kubectl -n default delete sandbox smoke
 ```
 
 ## Troubleshooting (the smoke test prints these hints too)
-- *create 404 / "could not find"* → controller/CRD missing (`04-install-agent-sandbox.sh`), or wrong version: `--api-version v1alpha1`.
+- *create 404 / "could not find"* → controller/CRD missing (`04-install-agent-sandbox.sh`), or the installed CRD's served version differs from the SDK's `SANDBOX_API_VERSION` (install a matching `k8s-agent-sandbox`).
 - *403 forbidden* (Method 1) → RBAC gap; check `05-setup-rbac.sh` granted `sandboxes` + `pods/exec` to the SA.
 - *never Ready* → `kubectl -n <ns> get pods,sandboxes`; with `--gvisor`, the gVisor pool is missing.
 
