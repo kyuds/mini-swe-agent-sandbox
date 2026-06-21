@@ -91,12 +91,12 @@ ok "RBAC applied. Verifying with 'kubectl auth can-i --as=...':"
 subj="system:serviceaccount:${RAY_NAMESPACE}:${SANDBOX_RUNNER_SA}"
 kubectl auth can-i create sandboxes.agents.x-k8s.io --as="$subj" -n "$SANDBOX_NAMESPACE" \
   && ok "  can create Sandboxes" || warn "  CANNOT create Sandboxes (is the CRD installed? run 04 first)"
-kubectl auth can-i create pods/exec      --as="$subj" -n "$SANDBOX_NAMESPACE" \
+kubectl auth can-i create pods --subresource=exec --as="$subj" -n "$SANDBOX_NAMESPACE" \
   && ok "  can exec into pods" || warn "  CANNOT exec into pods"
 kubectl auth can-i delete sandboxes.agents.x-k8s.io --as="$subj" -n "$SANDBOX_NAMESPACE" \
   && ok "  can delete Sandboxes" || warn "  CANNOT delete Sandboxes"
 # Negative check: the runner must NOT have cluster-wide power.
-if kubectl auth can-i create pods/exec --as="$subj" -n kube-system >/dev/null 2>&1; then
+if kubectl auth can-i create pods --subresource=exec --as="$subj" -n kube-system >/dev/null 2>&1; then
   warn "  runner can exec in kube-system — RBAC is too broad (expected: no)."
 else
   ok "  correctly DENIED exec in kube-system (least privilege holds)"
