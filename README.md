@@ -5,28 +5,6 @@
 [kubernetes-sigs/agent-sandbox](https://github.com/kubernetes-sigs/agent-sandbox) backend (GKE) —
 each SWE-bench box runs as an isolated (gVisor) `Sandbox` pod instead of a local Podman container.
 
-**Standalone:** `pip install` this repo (it depends on `skyrl`), then run the entrypoint here. SkyRL is
-a library dependency; nothing in the SkyRL repo is modified. The SkyRL `mini_swe_agent` *example* code
-(entrypoint / generator / utils) isn't shipped in the `skyrl` wheel, so it's **copied into this repo
-and edited** to use the agent-sandbox backend.
-
-## Layout
-
-| Path | What |
-|------|------|
-| `mini_swe_agent_sandbox/environment.py` | **The backend.** `AgentSandboxEnvironment` — creates a `Sandbox` CR per trajectory and `kubectl exec`s into it. |
-| `mini_swe_agent_sandbox/main.py` | Entrypoint (`python -m mini_swe_agent_sandbox.main`). Copy of SkyRL's `main_mini_swe.py`. |
-| `mini_swe_agent_sandbox/generator.py` | `MiniSweAgentGenerator` + the `init_and_run` Ray task. Copy of SkyRL's `mini_swe_generator.py`. |
-| `mini_swe_agent_sandbox/utils.py` | `get_sb_environment` / eval. Copy of SkyRL's `mini_swe_utils.py` **+ one branch** injecting the per-instance image for our backend. |
-| `mini_swe_agent_sandbox/preprocess.py` | SWE-Gym dataset prep. Copy of SkyRL's `preprocess_swegym.py`. |
-| `configs/` | `swebench_agent_sandbox.yaml` (task config wired to the backend) + `litellm.json`. |
-| `.env.miniswe` | `OPENAI_BASE_URL` (inference endpoint) + `LITELLM_MODEL_REGISTRY_PATH`. |
-| `scripts/run_mini_swe_agent_sandbox.sh` | One-command launcher (`uv run ... -m mini_swe_agent_sandbox.main`). |
-| `scripts/smoke_test_agent_sandbox.py` | **CPU-only smoke test** — proves the backend works on a real cluster without SkyRL/GPUs. |
-| `scripts/run_smoke_in_pod.sh` | Runs the smoke test from an in-cluster pod **as the runner SA** (so it exercises RBAC). |
-| `infra/` | GKE cluster, KubeRay, agent-sandbox controller, gVisor pool, RBAC (`up.sh`); **`up-smoke.sh`** / **`teardown-smoke.sh`** = CPU+gVisor subset for testing. |
-| `docs/` | `port-plan.md`, `port-guided.md`, and `testing-agent-sandbox.md` (how to validate the backend). |
-
 ## What's different from SkyRL's example
 
 Only two things — everything else is the upstream example, verbatim:
@@ -84,16 +62,14 @@ cd .. && bash scripts/run_smoke_in_pod.sh # run the test IN-CLUSTER as the runne
 ```
 `run_smoke_in_pod.sh` spins up a pod running as `skyrl-sandbox-runner`, syncs this repo in, and runs the
 test there (gVisor on by default) — so create → `execute()` → cleanup is driven exactly as a SkyRL Ray
-worker would (in-cluster token + RBAC, sandboxes on the gVisor pool), minus the GPU/LLM half. A quick
-laptop check (which **bypasses** RBAC) is
-`uv run python scripts/smoke_test_agent_sandbox.py --namespace default`. See
-`docs/testing-agent-sandbox.md` for the manual ssh/rsync steps, the phase → SkyRL-usage map, and a
-`kubectl` fallback.
+worker would (in-cluster token + RBAC, sandboxes on the gVisor pool), minus the GPU/LLM half.
 
-## Status
-Backend + wiring implemented and statically validated (compile; import of the backend against real
-`kubernetes`; unit-tested exit-code/lifecycle logic). **Not yet run on a cluster.** `uv lock` for the
-`fsdp` stack must be run on the target (linux/GPU) — see `pyproject.toml [tool.uv]` (mirrors SkyRL's
-resolution) and `docs/port-guided.md` §6–§7 for what's validated and the cluster-dependent assumptions
-to confirm (Sandbox readiness, pod-exec exit codes, TTL field, and that the installed `skyrl` version
-provides the `skyrl.train.*` / `skyrl.backends.skyrl_train.*` modules the copied code imports).
+To leave the Sandbox running at the end for manual inspection, pass `--keep` through `SMOKE_ARGS`:
+```bash
+SMOKE_ARGS="--keep" bash scripts/run_smoke_in_pod.sh
+# then, from your laptop (admin kubeconfig), view and clean it up:
+kubectl -n skyrl-sandboxes get sandboxes.agents.x-k8s.io -l app=mini-swe-agent-sandbox
+kubectl -n skyrl-sandboxes delete sandbox -l app=mini-swe-agent-sandbox   # when done
+```
+See `docs/testing-agent-sandbox.md` for the manual ssh/rsync steps, a laptop-only run, the phase →
+SkyRL-usage map, and a `kubectl` fallback.
