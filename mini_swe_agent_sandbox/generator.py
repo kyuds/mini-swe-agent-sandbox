@@ -60,7 +60,9 @@ def init_and_run(
     global_step: int,
     training_phase: TrainingPhase,
 ):
-    from loguru import logger
+    import logging
+
+    logger = logging.getLogger(__name__)
 
     model_config = sweagent_config.get("model", {})
     # Use new sampling parameters

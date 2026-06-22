@@ -28,16 +28,7 @@ import time
 # the end — querying separately from the env that did the delete is the more honest GC check.
 from k8s_agent_sandbox.k8s_helper import K8sHelper
 
-# Construct via mini-swe-agent's factory when available (exercises the real dotted-path wiring);
-# fall back to importing the class directly so the test still runs without mini-swe-agent installed.
-try:
-    from minisweagent.environments import get_environment
-
-    _HAVE_FACTORY = True
-except Exception:  # pragma: no cover
-    from mini_swe_agent_sandbox.environment import AgentSandboxEnvironment
-
-    _HAVE_FACTORY = False
+from minisweagent.environments import get_environment
 
 ENV_CLASS = "mini_swe_agent_sandbox.environment.AgentSandboxEnvironment"
 
@@ -53,11 +44,8 @@ def check(name: str, cond: bool, detail: str = "") -> bool:
 
 def make_env(config: dict):
     """Build the env the way SkyRL does: via get_environment (dotted-path) if available."""
-    if _HAVE_FACTORY:
-        print(f"  constructing via minisweagent.get_environment(environment_class={ENV_CLASS!r})")
-        return get_environment(dict(config, environment_class=ENV_CLASS))
-    print("  minisweagent not installed; constructing AgentSandboxEnvironment directly")
-    return AgentSandboxEnvironment(**config)
+    print(f"  constructing via minisweagent.get_environment(environment_class={ENV_CLASS!r})")
+    return get_environment(dict(config, environment_class=ENV_CLASS))
 
 
 def main() -> int:
@@ -83,6 +71,9 @@ def main() -> int:
         "resources": {"requests": {"cpu": "100m", "memory": "128Mi", "ephemeral-storage": "256Mi"}},
         "automount_service_account_token": False,
         "sandbox_ready_timeout": 300,
+        # With --keep, disable the __del__ finalizer so the Sandbox survives process exit for manual
+        # inspection; otherwise GC of `env` would delete it the moment main() returns.
+        "auto_cleanup": not args.keep,
         **isolation,
     }
 

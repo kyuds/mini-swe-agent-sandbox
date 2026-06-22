@@ -3,11 +3,13 @@ import traceback
 import uuid
 
 from typing import Dict, Any
-from loguru import logger
+import logging
 
 from jinja2 import Template
 
 from minisweagent.environments import Environment, get_environment
+
+logger = logging.getLogger(__name__)
 
 
 class MiniSWEEvaluationResult(TypedDict):

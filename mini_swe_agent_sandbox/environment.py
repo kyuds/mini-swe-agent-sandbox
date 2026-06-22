@@ -99,6 +99,11 @@ class AgentSandboxEnvironmentConfig:
     shutdown_after_seconds: int = 0
     """Optional TTL backstop. 0 = off. When >0 sets ``spec.lifecycle`` (verify your CRD supports it on
     a bare Sandbox). Explicit ``cleanup()`` is the primary reaper."""
+    auto_cleanup: bool = True
+    """When True, the sandbox is deleted automatically as the env is finalized (``__del__``) — the
+    safety net that reaps a box if the caller forgets ``cleanup()``. Set False to let the sandbox
+    outlive the process (e.g. the smoke test's ``--keep``, for manual ``kubectl exec`` inspection);
+    an explicit ``cleanup()`` still deletes it regardless of this flag."""
 
 
 class AgentSandboxEnvironment:
@@ -164,8 +169,11 @@ class AgentSandboxEnvironment:
             self._sandbox.delete()
 
     def __del__(self):
+        # Auto-reap on GC unless disabled (e.g. --keep wants the box to outlive the process).
+        # getattr guard: construction may have failed before self.config was assigned.
         try:
-            self.cleanup()
+            if getattr(self, "config", None) is None or self.config.auto_cleanup:
+                self.cleanup()
         except Exception:
             pass
 
