@@ -28,9 +28,11 @@ pods run untrusted model code with **no** API token and gVisor isolation (`infra
 ## Install
 
 ```bash
-uv sync                 # light: env backends + dataset prep (any platform)
-uv sync --extra fsdp    # full SkyRL training backend (skyrl[fsdp]; linux/GPU)
+# local dev — core deps only (env backends + dataset prep + smoke test; any platform, no GPU):
+uv venv && uv pip install -e .          # uv selects Python 3.12 per requires-python
 ```
+Training/generation pull the heavy `skyrl[fsdp]` stack (linux/GPU); the run scripts call
+`uv run --extra fsdp` for you, so there's no separate install step there.
 
 Cluster (shared by both examples): `cd infra && cp .env.example .env && $EDITOR .env` (set
 `PROJECT_ID`), then `./up.sh` (GKE + KubeRay + agent-sandbox + gVisor pool + RBAC).

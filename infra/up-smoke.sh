@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Minimal bring-up for the agent-sandbox SMOKE TEST (CPU only): cluster + agent-sandbox controller + RBAC.
-# NO GPU pool, NO KubeRay, NO gVisor pool, NO RayCluster — just enough to prove the AgentSandboxEnvironment
-# works end-to-end *as the runner ServiceAccount* (so RBAC is exercised). Cheap (one CPU default node).
+# Minimal bring-up for the agent-sandbox SMOKE TEST (CPU only): cluster + gVisor sandbox pool +
+# agent-sandbox controller + RBAC. NO GPU pool, NO KubeRay, NO RayCluster — just enough to prove the
+# AgentSandboxEnvironment works end-to-end *as the runner ServiceAccount* (so RBAC is exercised). Cheap.
 # Re-runnable; each step is idempotent. Mirrors up.sh but trimmed.
 #
 #   ASSUME_YES=1 ./up-smoke.sh     # skip the confirmation prompt

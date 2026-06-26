@@ -215,7 +215,7 @@ agent:
 environment:
   # kubernetes-sigs/agent-sandbox backend (replaces docker/podman). Selected via mini-swe-agent's
   # dotted-path fallback in minisweagent.environments.get_environment. Requires the
-  # `mini-swe-agent-sandbox` package to be installed (pip install -e .).
+  # `skyrl-sandbox` package to be installed (pip install -e .).
   environment_class: "skyrl_sandbox.mini_swe_agent.environment.AgentSandboxEnvironment"
   cwd: "/testbed"
   timeout: 180

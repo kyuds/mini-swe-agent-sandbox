@@ -7,7 +7,6 @@ from skyrl.train.utils import initialize_ray
 
 from .generator import MiniSweAgentGenerator, MiniSWEGeneratorConfig
 
-
 MiniSWEConfig = make_config(generator_cls=MiniSWEGeneratorConfig)
 
 

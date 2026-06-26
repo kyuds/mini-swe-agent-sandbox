@@ -3,7 +3,9 @@ name = "skyrl-sandbox"
 version = "0.1.0"
 description = "Run SkyRL RL workloads (mini-swe-agent SWE-bench; a toy multiplication task) on kubernetes-sigs/agent-sandbox instead of Podman."
 readme = "README.md"
-requires-python = ">=3.11"
+# 3.12+: the copied mini_swe_agent/utils.py uses a 3.12-only nested-quote f-string, and the fsdp stack
+# (flash-attn wheel) targets cp312. uv then auto-selects 3.12 for the venv.
+requires-python = ">=3.12"
 dependencies = [
     # Pin to 0.5.x (lock the minor, allow patch only): 0.5.0 was a breaking change vs 0.4.x — GVK moved
     # v1alpha1 -> v1beta1, and SandboxClient.create_sandbox switched from template-based to warmpool-based

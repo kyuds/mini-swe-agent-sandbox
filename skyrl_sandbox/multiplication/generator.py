@@ -14,7 +14,6 @@ Status: untested on a cluster; shares mini-swe's generate-only caveats (docs/exp
 """
 
 import asyncio
-import traceback
 from dataclasses import dataclass
 from typing import Any, Dict
 
@@ -61,7 +60,9 @@ def init_and_run(prompt: list, env_extras: dict, litellm_model_name: str, sampli
     reward = 0.0
     messages = list(prompt)  # [system, user("a * b")]
     try:
-        env = MultiplySandboxEnv(env_config={}, extras=env_extras)
+        # thread max_turns so the env's internal turn cap matches the configured value (else it
+        # would use MultiplySandboxEnv's default of 5).
+        env = MultiplySandboxEnv(env_config={}, extras={**env_extras, "max_turns": max_turns})
         env.init(messages)  # creates the Sandbox + computes the product in-pod (commands.run)
         for _ in range(max_turns):
             content = model.query(messages)["content"]

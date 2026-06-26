@@ -22,15 +22,14 @@ skyrl-sandbox/
       environment.py, kubernetes_util.py, generator.py, main.py,
       generate.py (NEW), utils.py, preprocess.py, __init__.py
     multiplication/                  # example 2 — toy task, ONE image, SDK commands.run
-      sandbox.py, env.py, dataset.py, main.py, generate.py, __init__.py (NEW)
+      sandbox.py, env.py, generator.py, dataset.py, main.py, generate.py, __init__.py (NEW)
   configs/
-    mini_swe_agent/  swebench_agent_sandbox.yaml, litellm.json
-    multiplication/  multiply_sandbox.yaml
+    mini_swe_agent/  swebench_agent_sandbox.yaml, litellm.json   # multiplication is CLI-driven (no yaml)
   scripts/
     mini_swe_agent/  run_*.sh, smoke_test_agent_sandbox.py, run_smoke_in_pod.sh
-    multiplication/  run_*.sh
+    multiplication/  run_generate_fireworks.sh, run_multiply_sandbox.sh
   infra/                             # SHARED across both examples (see §3)
-    manifests/  sandbox-example.yaml, sandbox-template-multiplication.yaml (NEW), ...
+    manifests/  sandbox-example.yaml, sandbox-template-multiplication.yaml, sandbox-warmpool-multiplication.yaml, ...
   docs/
 ```
 
@@ -127,11 +126,11 @@ and train-via-your-own-vLLM paths. (Originally it used SkyRL's default gym gener
 `RemoteInferenceEngine`, which sends no auth header and so can't reach a hosted provider like Fireworks
 — so multiplication now uses litellm directly, exactly like mini-swe.)
 
-**Harbor, kept as a documented follow-up (so it can still be "tried"):** we scaffold a harbor
-**task directory** for multiply (`instruction.md` + `environment/Dockerfile` + `tests/test.sh`) under
-`examples/`-style layout, and document running it through *real* harbor with harbor's own `docker`/`gke`
-provider (`uv run --extra harbor ...`). That is the faithful "use harbor" path; it just doesn't use
-the agent-sandbox SDK. See §2 caveats.
+**Harbor, as a documented follow-up (NOT built):** the faithful "use harbor" path would be a harbor
+**task directory** for multiply (`instruction.md` + `environment/Dockerfile` + `tests/test.sh`) run
+through *real* harbor with harbor's own `docker`/`gke` provider (`uv run --extra harbor ...`). We did
+**not** scaffold this — it doesn't use the agent-sandbox SDK and is out of scope here; it's recorded as
+the option if you later want to exercise harbor itself.
 
 ### Implementation
 - `skyrl_sandbox/multiplication/sandbox.py` — thin SDK wrapper: picks the connection config
@@ -212,10 +211,10 @@ multiplication example.
    `openai/<model.path>` (SkyRL local vLLM). For a hosted model the tokenizer is a *stand-in* (fine for
    generation/eval token bookkeeping, not training). litellm.json is just an optional cost/context
    registry — you do **not** add providers there; they're built into litellm and chosen by the prefix.
-4. **harbor not literally used.** We mirror harbor's GeneratorInterface architecture and scaffold a
-   harbor task-dir, but do not run the external harbor framework (it owns execution internally and
-   would need a custom agent-sandbox provider; Python ≥3.12 + provider keys). The harbor-native path
-   is documented as a follow-up.
+4. **harbor not literally used.** We mirror harbor's GeneratorInterface architecture but do **not** run
+   the external harbor framework, and did **not** scaffold a harbor task-dir (it owns execution
+   internally and would need a custom agent-sandbox provider; Python ≥3.12 + provider keys). The
+   harbor-native path is documented as a follow-up only.
 5. **Multiplication task is contrived.** Reward verification runs in the sandbox to exercise
    `commands.run`; the task itself doesn't *need* a sandbox. A tool-use variant (model issues shell
    commands, env runs them) is a natural, more realistic extension.

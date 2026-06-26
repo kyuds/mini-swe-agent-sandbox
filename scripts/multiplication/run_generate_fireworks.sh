@@ -12,7 +12,8 @@
 #
 # TOKENIZER (model.path, a valid HF id) is decoupled from FW_MODEL (the Fireworks model). The tokenizer
 # is a stand-in for the served model -- fine for generation, not training. (To target your own vLLM
-# instead of Fireworks: set MODEL=openai/<id> + OPENAI_BASE_URL=<vLLM>/v1 + OPENAI_API_KEY, drop FW_MODEL.)
+# instead of Fireworks, run the entrypoint directly with
+# `generator.multiply_litellm_model_name=openai/<served-id>` + `OPENAI_BASE_URL=<vLLM>/v1` + `OPENAI_API_KEY`.)
 set -euo pipefail
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$REPO_DIR"

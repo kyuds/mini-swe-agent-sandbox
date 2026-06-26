@@ -1,4 +1,4 @@
-# infra/ — GKE cluster for mini-swe-agent + agent-sandbox
+# infra/ — GKE cluster for skyrl-sandbox (mini-swe-agent + multiplication) on agent-sandbox
 
 Provisions a GKE Standard cluster wired for SkyRL-style agentic RL: KubeRay drives
 the training/inference cluster on GPUs, and `agent-sandbox` runs untrusted

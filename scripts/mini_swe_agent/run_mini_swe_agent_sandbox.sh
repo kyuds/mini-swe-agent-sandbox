@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 set -x
 
 # Standalone launcher: GRPO training (Qwen3-8B, 1x8 H100) on the SWE-bench task, using SkyRL (a pip
@@ -74,5 +75,5 @@ uv run --extra fsdp --env-file "$ENV_FILE" python -m skyrl_sandbox.mini_swe_agen
   trainer.resume_mode=null \
   trainer.ckpt_path="$CKPT_PATH" \
   generator.miniswe_config_path="$CONFIG" \
-  generator.miniswe_traj_dir=$MINISWE_TRAJ_DIR
-  $@
+  generator.miniswe_traj_dir="$MINISWE_TRAJ_DIR" \
+  "$@"
