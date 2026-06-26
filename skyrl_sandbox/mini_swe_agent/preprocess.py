@@ -10,6 +10,12 @@ import datasets
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--output_dir", default="~/data/swe_gym_subset")
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="If set, keep only the first N rows of each split (for small test/generation runs).",
+    )
 
     args = parser.parse_args()
 
@@ -20,6 +26,10 @@ if __name__ == "__main__":
 
     train_dataset = datasets.load_dataset(data_source, "default")["train"]
     val_dataset = datasets.load_dataset(eval_data_source, "default")["test"]
+
+    if args.limit is not None:
+        train_dataset = train_dataset.select(range(min(args.limit, len(train_dataset))))
+        val_dataset = val_dataset.select(range(min(args.limit, len(val_dataset))))
 
     # add a row to each data item that represents a unique id
     def make_map_fn(split):

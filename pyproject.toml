@@ -22,6 +22,11 @@ dependencies = [
 
 [project.optional-dependencies]
 fsdp = ["skyrl[fsdp]"]
+# Lighter tier for generate-only runs: skyrl-train deps (ray, skyrl-gym, transformers, hydra) WITHOUT
+# the vllm/torch-pin/flashinfer inference stack. Generation takes tokens from litellm (Fireworks) with
+# run_engines_locally=false, so vllm is never started -- only needs to be importable, which it isn't on
+# this path. Use for the no-GPU generation demo; training still needs [fsdp].
+train = ["skyrl[skyrl-train]"]
 
 [build-system]
 requires = ["hatchling"]
@@ -64,8 +69,8 @@ url = "https://wheels.vllm.ai/0.20.2/cu129"
 explicit = true
 
 [tool.uv.sources]
-# Uncomment to pin SkyRL to the source whose example code this repo copied (use if PyPI lags):
-# skyrl = { git = "https://github.com/NovaSky-AI/SkyRL.git", rev = "6c300c75" }
+# Pin SkyRL to the source whose example code this repo copied (PyPI 'skyrl' is a 0.0.1 placeholder):
+skyrl = { git = "https://github.com/NovaSky-AI/SkyRL.git", rev = "6c300c75" }
 flashinfer-jit-cache = { index = "flashinfer-cu128", marker = "sys_platform == 'linux'" }
 vllm = [{ index = "vllm-cu129", marker = "sys_platform == 'linux'" }]
 flash-attn = { url = "https://github.com/erictang000/flash-attention/releases/download/v2.8.3-torch2.11-clean/flash_attn-2.8.3-cp312-cp312-linux_x86_64.whl", marker = "sys_platform == 'linux' and python_version == '3.12' and platform_machine == 'x86_64'" }
