@@ -8,7 +8,7 @@
 #   bash scripts/mini_swe_agent/run_smoke_in_pod.sh                  # defaults
 #   SMOKE_ARGS="--gvisor" bash scripts/mini_swe_agent/run_smoke_in_pod.sh   # pass flags through to the test
 set -euo pipefail
-REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 # Namespaces from infra/.env (fall back to the documented defaults).
 source "${REPO_DIR}/infra/load-config.sh" 2>/dev/null || true
