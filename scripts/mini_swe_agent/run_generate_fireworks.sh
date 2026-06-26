@@ -47,6 +47,7 @@ CONFIG="${CONFIG:-$REPO_DIR/configs/mini_swe_agent/swebench_agent_sandbox.yaml}"
 uv run --extra "${SKYRL_EXTRA:-fsdp}" python -m skyrl_sandbox.mini_swe_agent.generate \
   data.val_data="['$DATA_DIR/validation.parquet']" \
   trainer.policy.model.path="$TOKENIZER" \
+  trainer.max_prompt_length="${MAX_PROMPT:-8192}" \
   generator.miniswe_litellm_model_name="fireworks_ai/$FW_MODEL" \
   generator.inference_engine.run_engines_locally=false \
   generator.inference_engine.num_engines=0 \

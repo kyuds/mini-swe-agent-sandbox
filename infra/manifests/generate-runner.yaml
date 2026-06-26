@@ -1,0 +1,36 @@
+# A CPU "runner" pod for the mini-swe-agent GENERATE-only example (Fireworks) — the generation
+# analogue of smoke-runner.yaml. Like that pod it runs as the SANDBOX_RUNNER_SA identity, so it
+# creates/exec's/deletes Sandboxes through the real RBAC + in-cluster-token path; the LLM is reached
+# via litellm -> Fireworks (no GPUs, no training, no local vLLM).
+#
+# Bigger than smoke-runner: this installs the SkyRL stack (skyrl[skyrl-train]) into a uv venv, so it
+# needs several GB of memory + ephemeral storage. Lands on the default node pool (no nodeSelector).
+# Has uv + python3.12 + tar preinstalled; run_generate_in_pod.sh tars the repo in and `uv run`s here.
+#
+# The Fireworks API key is injected at runtime by run_generate_in_pod.sh (read from the `fireworks`
+# Secret or $FIREWORKS_AI_API_KEY and piped over stdin), so it is NOT baked into this manifest and the
+# untrusted sandbox pods never receive it.
+#
+# NOTE: namespace + serviceAccountName below assume the infra/.env defaults
+#       (RAY_NAMESPACE=skyrl, SANDBOX_RUNNER_SA=skyrl-sandbox-runner). Edit if you changed them.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: generate-runner
+  namespace: skyrl                         # = RAY_NAMESPACE (where the SA lives)
+  labels:
+    app: mini-swe-generate-runner
+spec:
+  serviceAccountName: skyrl-sandbox-runner # = SANDBOX_RUNNER_SA — the identity that drives the sandboxes
+  restartPolicy: Never
+  containers:
+    - name: runner
+      image: ghcr.io/astral-sh/uv:python3.12-bookworm   # uv + python3.12 + tar preinstalled
+      command: ["sleep", "infinity"]
+      workingDir: /workspace
+      env:
+        - name: UV_LINK_MODE
+          value: copy
+      resources:
+        requests: { cpu: "1", memory: "4Gi", ephemeral-storage: "20Gi" }
+        limits: { cpu: "3", memory: "10Gi", ephemeral-storage: "40Gi" }

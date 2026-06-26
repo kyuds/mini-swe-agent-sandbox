@@ -1,6 +1,6 @@
 import asyncio
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Dict, List, Optional, Any, Tuple, TYPE_CHECKING
 import yaml
 import traceback
 import ray
@@ -22,6 +22,9 @@ from skyrl.train.generators.utils import (
     get_rollout_metrics,
     get_response_ids_and_loss_mask_from_messages,
 )
+
+if TYPE_CHECKING:
+    from .environment import AgentSandboxEnvironment
 
 
 @dataclass
@@ -80,7 +83,7 @@ def init_and_run(
     model = get_model(litellm_model_name, model_config)
 
     agent = None
-    env = None
+    env: Optional["AgentSandboxEnvironment"] = None
     extra_info = None
     result = None
     reward = 0
@@ -118,6 +121,16 @@ def init_and_run(
                 error = str(e)
 
             save_traj(agent, path, exit_status=exit_status, result=result, extra_info=extra_info, reward=reward, eval_error=eval_error)  # type: ignore[arg-type]
+
+        # Explicitly reap the agent sandbox. We cannot rely on AgentSandboxEnvironment.__del__: in a
+        # Ray worker the env object outlives this task (worker stays alive) and __del__ never runs on a
+        # killed worker -- and the Sandbox CR has no ownerReferences, so nothing else GCs it. The eval
+        # sandbox (created in evaluate_trajectory) is reaped there.
+        if env is not None:
+            try:
+                env.cleanup()
+            except Exception:
+                logger.warning("failed to clean up agent sandbox for %s", instance.get("instance_id"), exc_info=True)
 
     return (agent.messages if agent is not None else [], reward, error)
 
