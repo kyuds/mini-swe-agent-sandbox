@@ -21,21 +21,31 @@ cd "$REPO_DIR"
 FIREWORKS_AI_API_KEY="${FIREWORKS_AI_API_KEY:-${FIREWORKS_API_KEY:-}}"
 : "${FIREWORKS_AI_API_KEY:?set FIREWORKS_AI_API_KEY to your Fireworks key}"
 export FIREWORKS_AI_API_KEY
+# See scripts/mini_swe_agent/run_generate_fireworks.sh for the rationale behind these two env vars: the
+# generator reaches the LLM via litellm (no SkyRL engine), so we use SkyRL's legacy inference path (the
+# new one `import vllm`s even for a remote/no-engine client) and disable Ray's `uv run` hook (it rebuilds
+# a broken per-worker venv). Both let `skyrl[skyrl-train]` suffice (no `fsdp`/vllm).
+export _SKYRL_USE_NEW_INFERENCE=0
+export RAY_ENABLE_UV_RUN_RUNTIME_ENV=0
 
 TOKENIZER="${TOKENIZER:-Qwen/Qwen3-4B}"   # HF id -> tokenizer (model.path)
 # Fireworks model id -- VERIFY it exists in your catalog (https://fireworks.ai/models); override FW_MODEL=...
-FW_MODEL="${FW_MODEL:-accounts/fireworks/models/qwen3-4b}"
+FW_MODEL="${FW_MODEL:-accounts/fireworks/models/gpt-oss-20b}"
 DATA_DIR="${DATA_DIR:-$HOME/data/multiply_sandbox}"
 
-uv run --extra fsdp python -m skyrl_sandbox.multiplication.generate \
+# run_engines_locally=false + num_engines=0 -> an empty remote inference client (litellm does generation,
+# so no SkyRL engine is needed). logprobs=null: remote mode rejects sampling_params.logprobs.
+uv run --extra "${SKYRL_EXTRA:-fsdp}" python -m skyrl_sandbox.multiplication.generate \
   data.val_data="['$DATA_DIR/validation.parquet']" \
   trainer.policy.model.path="$TOKENIZER" \
   generator.multiply_litellm_model_name="fireworks_ai/$FW_MODEL" \
   generator.inference_engine.run_engines_locally=false \
+  generator.inference_engine.num_engines=0 \
   trainer.placement.colocate_all=false \
   trainer.eval_batch_size="${EVAL_BATCH_SIZE:-2}" \
   generator.n_samples_per_prompt=1 \
   generator.sampling_params.max_generate_length="${MAX_GEN:-1024}" \
+  generator.sampling_params.logprobs=null \
   generator.max_input_length="${MAX_INPUT:-4096}" \
   trainer.max_prompt_length="${MAX_PROMPT:-512}" \
   generator.max_turns="${MAX_TURNS:-3}" \

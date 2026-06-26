@@ -42,7 +42,11 @@ class MultiplyGenerateExp(BasePPOExp):
 
     async def run(self, inference_engine_client: InferenceEngineInterface) -> dict:
         assert self.eval_dataset is not None, "generate-only requires an eval dataset (set data.val_data)"
-        await inference_engine_client.wake_up()
+        # The multiply generator drives the LLM via litellm directly (Fireworks / remote OpenAI), not the
+        # SkyRL inference engine, so this path runs with no engines (num_engines=0). Only wake real engines
+        # (wake_up() HTTP-POSTs each remote engine and asserts >0 engines, so it must be skipped here).
+        if getattr(inference_engine_client, "engines", None):
+            await inference_engine_client.wake_up()
         generator = self.get_generator(self.cfg, self.tokenizer, inference_engine_client)
         eval_fn = evaluate_step_wise if self.cfg.generator.step_wise_trajectories else evaluate
         results = await eval_fn(

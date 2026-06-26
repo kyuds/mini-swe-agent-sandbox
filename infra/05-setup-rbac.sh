@@ -49,10 +49,20 @@ metadata:
   name: sandbox-runner
   namespace: ${SANDBOX_NAMESPACE}
 rules:
-# Lifecycle of cold Sandbox custom resources.
+# Lifecycle of cold Sandbox custom resources (mini-swe backend: raw per-instance Sandbox CRs).
 - apiGroups: ["agents.x-k8s.io"]
   resources: ["sandboxes"]
   verbs: ["create", "get", "list", "watch", "delete"]
+# SDK warm-pool path (multiplication backend): SandboxClient.create_sandbox(warmpool=...) writes a
+# SandboxClaim (and delete_sandbox deletes it) in the EXTENSIONS API group, and reads the referenced
+# pool/template. Without these the SDK path 403s on sandboxclaims. (The mini-swe backend doesn't need
+# them — it POSTs raw Sandbox CRs in the core group above.)
+- apiGroups: ["extensions.agents.x-k8s.io"]
+  resources: ["sandboxclaims"]
+  verbs: ["create", "get", "list", "watch", "delete"]
+- apiGroups: ["extensions.agents.x-k8s.io"]
+  resources: ["sandboxwarmpools", "sandboxtemplates"]
+  verbs: ["get", "list", "watch"]
 # Read pod state (wait for Ready before exec) ...
 - apiGroups: [""]
   resources: ["pods"]
@@ -95,6 +105,8 @@ kubectl auth can-i create pods --subresource=exec --as="$subj" -n "$SANDBOX_NAME
   && ok "  can exec into pods" || warn "  CANNOT exec into pods"
 kubectl auth can-i delete sandboxes.agents.x-k8s.io --as="$subj" -n "$SANDBOX_NAMESPACE" \
   && ok "  can delete Sandboxes" || warn "  CANNOT delete Sandboxes"
+kubectl auth can-i create sandboxclaims.extensions.agents.x-k8s.io --as="$subj" -n "$SANDBOX_NAMESPACE" \
+  && ok "  can create SandboxClaims (SDK warm-pool path)" || warn "  CANNOT create SandboxClaims (multiplication SDK path will 403)"
 # Negative check: the runner must NOT have cluster-wide power.
 if kubectl auth can-i create pods --subresource=exec --as="$subj" -n kube-system >/dev/null 2>&1; then
   warn "  runner can exec in kube-system — RBAC is too broad (expected: no)."

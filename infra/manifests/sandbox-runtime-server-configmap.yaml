@@ -1,0 +1,64 @@
+# A minimal agent-sandbox ":8888 runtime server" shipped as code (no image build / registry needed).
+#
+# The multiplication backend drives sandboxes via the SDK's commands.run, which POSTs to an in-image
+# HTTP server: POST /execute {"command": "..."} -> {"stdout","stderr","exit_code"} (and GET / for the
+# readiness probe). Upstream expects you to BUILD that server from agent-sandbox's
+# examples/python-runtime-sandbox/ and push it to a registry. To avoid a Docker build, we implement the
+# exact same contract in ~40 lines of the Python *standard library* and mount it into a stock
+# `python:3.12-slim` pod via this ConfigMap (see sandbox-template-multiplication.yaml).
+#
+# Apply BEFORE the SandboxTemplate (the template mounts this ConfigMap):
+#   kubectl apply -f infra/manifests/sandbox-runtime-server-configmap.yaml
+#
+# NOTE: runs the model-supplied command via `sh -c` inside the gVisor-isolated, token-less sandbox pod
+# (the isolation boundary is gVisor + automountServiceAccountToken=false, per the template). For
+# production you'd bake a hardened image instead; this is the no-build path for the demo/smoke run.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sandbox-runtime-server
+  namespace: skyrl-sandboxes
+data:
+  server.py: |
+    """Stdlib implementation of the agent-sandbox :8888 runtime contract (POST /execute, GET /)."""
+    import json
+    import subprocess
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    PORT = 8888
+
+    class Handler(BaseHTTPRequestHandler):
+        def _send(self, code, obj):
+            body = json.dumps(obj).encode()
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_GET(self):
+            # Readiness probe hits GET / — any 2xx marks the warm pod adoptable.
+            self._send(200, {"status": "ok"})
+
+        def do_POST(self):
+            if self.path.rstrip("/").rsplit("/", 1)[-1] != "execute":
+                self._send(404, {"error": "not found"})
+                return
+            length = int(self.headers.get("Content-Length") or 0)
+            try:
+                payload = json.loads(self.rfile.read(length) or b"{}")
+            except Exception as e:
+                self._send(400, {"error": f"bad json: {e}"})
+                return
+            command = payload.get("command", "")
+            try:
+                p = subprocess.run(command, shell=True, capture_output=True, text=True)
+                self._send(200, {"stdout": p.stdout, "stderr": p.stderr, "exit_code": p.returncode})
+            except Exception as e:  # never 500 — return the failure in-band like a real shell error
+                self._send(200, {"stdout": "", "stderr": str(e), "exit_code": -1})
+
+        def log_message(self, *args):
+            pass  # quiet
+
+    if __name__ == "__main__":
+        ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()

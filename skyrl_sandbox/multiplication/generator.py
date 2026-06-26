@@ -156,6 +156,15 @@ class MultiplyGenerator(SkyRLGymGenerator):
         sampling_params = get_sampling_params_for_backend(
             self.generator_cfg.inference_engine.backend, self.generator_cfg.sampling_params
         )
+        # SkyRL only knows the 'vllm' backend, so it always emits vLLM-only sampling params. When the LLM
+        # is reached via litellm against a hosted OpenAI-compatible API (Fireworks), those are rejected
+        # ("Extra inputs are not permitted"), and vLLM sentinels are out of range (top_k=-1 means "no
+        # filtering" in vLLM but Fireworks requires 0..100). Sanitize for the litellm path.
+        for _k in ("skip_special_tokens", "include_stop_str_in_output", "min_tokens"):
+            sampling_params.pop(_k, None)
+        _tk = sampling_params.get("top_k")
+        if not (isinstance(_tk, int) and 0 <= _tk <= 100):
+            sampling_params.pop("top_k", None)  # drop vLLM's -1 sentinel; let the provider default
 
         tasks = [
             self.multiply_agent_loop(

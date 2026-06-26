@@ -9,17 +9,13 @@
 # Requires the extensions CRDs (SandboxTemplate/SandboxClaim/SandboxWarmPool) — installed by default
 # (INSTALL_AGENT_SANDBOX_EXTENSIONS=true in infra/.env, applied by 04-install-agent-sandbox.sh).
 #
-# THE RUNTIME IMAGE (answers "what's the default image?"): there is NO published default. The image that
-# serves the :8888 HTTP API commands.run POSTs to is a reference FastAPI server you BUILD yourself from
-# agent-sandbox's examples/python-runtime-sandbox/ (FROM python:3.14-slim; main.py exposes
-# POST /execute -> {stdout, stderr, exit_code} on :8888, runs as non-root USER 1000). Upstream templates
-# literally use `IMAGE_PLACEHOLDER` / `sandbox-runtime:latest` (a locally-built tag). On GKE:
-#   git clone https://github.com/kubernetes-sigs/agent-sandbox && cd agent-sandbox/examples/python-runtime-sandbox
-#   docker build -t <REGION>-docker.pkg.dev/<PROJECT_ID>/<REPO>/sandbox-runtime:latest .
-#   docker push  <REGION>-docker.pkg.dev/<PROJECT_ID>/<REPO>/sandbox-runtime:latest
-# then set `image:` below. (kind smoke: `docker build -t sandbox-runtime .` + `kind load docker-image
-# sandbox-runtime:latest`.) Any image serving the same POST /execute contract on :8888 works. Left as a
-# placeholder so a wrong image can't silently "succeed".
+# THE RUNTIME IMAGE: commands.run POSTs to an in-image :8888 server (POST /execute ->
+# {stdout, stderr, exit_code}; GET / for readiness). Upstream expects you to BUILD that server from
+# agent-sandbox's examples/python-runtime-sandbox/ and push it to a registry. To avoid a Docker build,
+# this template runs a stock `python:3.12-slim` and mounts an equivalent stdlib server from the
+# `sandbox-runtime-server` ConfigMap (infra/manifests/sandbox-runtime-server-configmap.yaml) — apply
+# that ConfigMap FIRST. Any image/command serving the same /execute contract on :8888 works; to use a
+# real built image instead, drop the volume + command below and set `image:` to your registry tag.
 #
 # GVK: v1beta1 — matches the pinned SDK (k8s-agent-sandbox>=0.5.0,<0.6, whose constants + the
 # SandboxClaim it writes are v1beta1). The cluster's AGENT_SANDBOX_VERSION controller must serve v1beta1
@@ -46,13 +42,16 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: sandbox
-          image: IMAGE_PLACEHOLDER # <-- build from examples/python-runtime-sandbox (see header); must serve :8888
-          # No `command:` override: the runtime image's own CMD starts the uvicorn :8888 server.
-          # (The mini-swe pod-exec backend uses `sleep infinity`; commands.run needs the live server.)
+          image: python:3.12-slim # stock image; the :8888 server is the ConfigMap-mounted stdlib script
+          # Run the runtime server mounted from the sandbox-runtime-server ConfigMap (see header).
+          command: ["python3", "/opt/runtime/server.py"]
           ports:
             - containerPort: 8888
+          volumeMounts:
+            - name: runtime-server
+              mountPath: /opt/runtime
           # Gate readiness on the server being up, so a warm pod is only adopted once commands.run can
-          # connect (mirrors the upstream python-sandbox-template). Drop if your image has no GET /.
+          # connect (mirrors the upstream python-sandbox-template).
           readinessProbe:
             httpGet:
               path: "/"
@@ -68,3 +67,7 @@ spec:
               cpu: "1"
               memory: "2Gi"
               ephemeral-storage: "4Gi"
+      volumes:
+        - name: runtime-server
+          configMap:
+            name: sandbox-runtime-server   # infra/manifests/sandbox-runtime-server-configmap.yaml
