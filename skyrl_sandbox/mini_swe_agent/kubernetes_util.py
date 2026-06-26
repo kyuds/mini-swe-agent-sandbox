@@ -12,10 +12,10 @@ Design (rationale in docs/expansion-plan.md):
 * **Uses the agent-sandbox SDK for lifecycle, not spawn-by-template.** We build on the SDK's
   ``K8sHelper`` (its in/out-of-cluster config + API clients + tested readiness watch) and its
   ``constants`` so the Sandbox GVK always tracks the installed CRD (currently
-  ``agents.x-k8s.io/v1alpha1``) instead of being hard-coded. We create the ``Sandbox`` CR
-  **directly** via the SDK's API client rather than ``SandboxClient.create_sandbox(template=...)``,
-  because that only stamps a *named SandboxTemplate* and can't carry the per-instance SWE-bench
-  image.
+  ``agents.x-k8s.io/v1beta1``) instead of being hard-coded. We create the ``Sandbox`` CR
+  **directly** via the SDK's API client rather than ``SandboxClient.create_sandbox(warmpool=...)``,
+  because that spawns from a *named SandboxWarmPool → SandboxTemplate* (single image) and can't carry
+  the per-instance SWE-bench image.
 * **Exec → Kubernetes pod-exec** (the ``docker exec`` analogue), not the SDK's ``commands.run``:
   ``commands.run`` POSTs to an in-image HTTP server on ``:8888`` that SWE-bench images don't ship.
   pod-exec does not return the exit code in-band like ``docker exec``, so we recover it from the

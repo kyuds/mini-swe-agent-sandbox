@@ -12,7 +12,7 @@ Two examples, one per package folder — they sit at **opposite ends** of the ag
 |---|---|---|
 | task | [mini-swe-agent](https://github.com/SWE-agent/mini-swe-agent) SWE-bench | toy `a * b` |
 | image | **per-instance** (thousands) | **one fixed** image |
-| create | raw `Sandbox` CR (no template) | SDK `create_sandbox(template=…)` |
+| create | raw `Sandbox` CR (no template) | SDK `create_sandbox(warmpool=…)` → pool → template |
 | execute | Kubernetes **pod-exec** | SDK **`commands.run`** (in-image `:8888`) |
 | needs `:8888` runtime image? | no | **yes** |
 
@@ -56,17 +56,21 @@ The example targets the mini-swe-agent **1.x** API, so `pyproject.toml` pins `mi
 ```bash
 # data
 uv run python -m skyrl_sandbox.multiplication.dataset --output_dir ~/data/multiply_sandbox
-# apply the SandboxTemplate -- FIRST set its image to an agent-sandbox :8888 runtime image (see caveat):
+# apply the SandboxTemplate + SandboxWarmPool -- FIRST set the template image to an agent-sandbox :8888
+# runtime image (see caveat). 0.5.x spawns via the pool: claim -> SandboxWarmPool -> SandboxTemplate.
 kubectl apply -f infra/manifests/sandbox-template-multiplication.yaml
+kubectl apply -f infra/manifests/sandbox-warmpool-multiplication.yaml
 # generate-only against a remote endpoint (run inside the cluster; no GPUs):
 OPENAI_API_KEY=sk-... OPENAI_BASE_URL=<endpoint>/v1 bash scripts/multiplication/run_generate_multiply.sh
 # OR full GRPO training (GPUs):
 bash scripts/multiplication/run_multiply_sandbox.sh
 ```
 
-Each trajectory spawns a `Sandbox` from `multiplication-template` and computes/verifies the product
-with the SDK's `commands.run`. **Caveat:** the template image must ship the agent-sandbox `:8888`
-runtime server (left as a placeholder in the manifest on purpose) — see
+Each trajectory adopts a `Sandbox` from the `multiplication-pool` warm pool (→ `multiplication-template`)
+via `create_sandbox(warmpool=…)` and computes/verifies the product with the SDK's `commands.run`.
+**Caveat:** the template image must ship the agent-sandbox `:8888` runtime server (left as a placeholder
+in the manifest on purpose — there is no published default; build it from agent-sandbox's
+`examples/python-runtime-sandbox/`) — see
 [`docs/expansion-plan.md`](docs/expansion-plan.md) §5. *(harbor was researched as the harness; it owns
 execution internally and would need a custom agent-sandbox provider, so we mirror its `GeneratorInterface`
 architecture instead — see the plan §2.)*

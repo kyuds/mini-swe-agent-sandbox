@@ -114,7 +114,7 @@ rev, Python ≥3.12, needs provider keys). That's a large, mostly-out-of-our-rep
 exercise the agent-sandbox SDK (harbor would own execution).
 
 **Decision:** implement the multiplication example as a **SkyRL-gym `BaseTextEnv` whose execution goes
-through the agent-sandbox SDK** (`create_sandbox(template)` + `commands.run`), driven by SkyRL's
+through the agent-sandbox SDK** (`create_sandbox(warmpool=…)` + `commands.run`), driven by SkyRL's
 **default** generator. This is the path that actually exercises agent-sandbox + the SDK (the whole
 point), is entirely in-repo, and is the simplest thing that can run. It mirrors harbor's *architecture*
 (plug in at SkyRL's env/generator seam) without depending on harbor's internal provider API.
@@ -128,9 +128,10 @@ the agent-sandbox SDK. See §2 caveats.
 ### Implementation
 - `skyrl_sandbox/multiplication/sandbox.py` — thin SDK wrapper: picks the connection config
   (`SandboxInClusterConnectionConfig(use_pod_ip=True)` when running in-cluster as a Ray worker;
-  `SandboxLocalTunnelConnectionConfig` for a laptop), `SandboxClient.create_sandbox(template=…,
-  warmpool=…)`, `commands.run(cmd, timeout)->ExecutionResult(stdout,stderr,exit_code)`,
-  `delete_sandbox`. **All SDK, no pod-exec.**
+  `SandboxLocalTunnelConnectionConfig` for a laptop), `SandboxClient.create_sandbox(warmpool=…)` (0.5.x:
+  claim → SandboxWarmPool → SandboxTemplate),
+  `commands.run(cmd, timeout)->ExecutionResult(stdout,stderr,exit_code)`, `delete_sandbox`. **All SDK,
+  no pod-exec.**
 - `skyrl_sandbox/multiplication/env.py` — `MultiplySandboxEnv(BaseTextEnv)`: ports MultiplyEnv's
   task/reward, but the correctness check **runs inside the sandbox** (`commands.run("python3 -c
   'print(<a>*<b>)'")`, compare to the model's boxed answer). Sandbox created on first use, deleted on
@@ -143,7 +144,9 @@ the agent-sandbox SDK. See §2 caveats.
 - `skyrl_sandbox/multiplication/generate.py` — generate-only variant (default generator + the env).
 - `configs/multiplication/multiply_sandbox.yaml` + `scripts/multiplication/run_*.sh`.
 - `infra/manifests/sandbox-template-multiplication.yaml` — the **SandboxTemplate** (single image =
-  the agent-sandbox runtime base image that ships the `:8888` server; gVisor; no API token).
+  the agent-sandbox runtime image that ships the `:8888` server; gVisor; no API token) +
+  `infra/manifests/sandbox-warmpool-multiplication.yaml` — the **SandboxWarmPool** that references it
+  (0.5.x requires a pool for SDK create; `replicas` = warm sandboxes kept ready).
 
 ---
 
@@ -154,8 +157,9 @@ are generic). The only mini-swe-specific bit is `infra/manifests/sandbox-example
 cold Sandbox). Changes:
 - Keep `sandbox-example.yaml` as the generic cold-Sandbox smoke artifact (rename comment to drop the
   SWE-bench framing).
-- Add `infra/manifests/sandbox-template-multiplication.yaml` (a `SandboxTemplate`, needs the
-  extensions CRDs — already installed by default, `INSTALL_AGENT_SANDBOX_EXTENSIONS=true`).
+- Add `infra/manifests/sandbox-template-multiplication.yaml` + `sandbox-warmpool-multiplication.yaml`
+  (a `SandboxTemplate` + `SandboxWarmPool`, need the extensions CRDs — installed by default,
+  `INSTALL_AGENT_SANDBOX_EXTENSIONS=true`).
 - No change to up.sh/up-smoke.sh/RBAC (the runner SA already covers sandboxes + pods/exec; for the
   SDK-`commands.run` path the runner additionally needs network egress to the pod `:8888`, which is
   in-cluster pod-to-pod traffic — allowed by default; flag if a NetworkPolicy is later added).
@@ -163,10 +167,11 @@ cold Sandbox). Changes:
 ---
 
 ## 4. agent-sandbox research (requirement 3)
-See **`docs/agent-sandbox-research.md`**. One-liners: (1) the SDK's `create_sandbox` *requires* a
-template; you can only go template-less via a raw `Sandbox` CR (what mini-swe does), losing
-`commands.run`. (2) Warm pools are **single-image** (one template per pool) — useless for SWE-bench's
-per-instance images, but a good latency optimization for the single-image multiplication example.
+See **`docs/agent-sandbox-research.md`**. One-liners: (1) 0.5.x's SDK `create_sandbox(warmpool=…)`
+*requires* a warm pool (→ template); template/pool-less only via a raw `Sandbox` CR (what mini-swe
+does), losing `commands.run`. (2) Warm pools are **single-image** (one `sandboxTemplateRef` per pool) —
+useless for SWE-bench's per-instance images, and the *required* spawn unit for the single-image
+multiplication example.
 
 ---
 
@@ -180,9 +185,7 @@ per-instance images, but a good latency optimization for the single-image multip
    (`infra/manifests/sandbox-template-multiplication.yaml`). Build from that example (or any image
    serving the same `/execute` contract on `:8888`), push to a registry the cluster can pull, and set
    `image:`. Our `MultiplicationSandbox.run` already maps that exact `stdout/stderr/exit_code` contract.
-   (mini-swe is unaffected — it pod-execs, no `:8888`.) Related skew: upstream HEAD examples are on
-   `v1beta1` while the pinned SDK 0.4.6 + our manifest use `v1alpha1` — pin `AGENT_SANDBOX_VERSION` to a
-   v1alpha1 release or bump the SDK so the SandboxTemplate/Claim versions agree.
+   (mini-swe is unaffected — it pod-execs, no `:8888`.)
 2. **Generate-only for mini-swe is untested-by-example.** SkyRL ships no mini-swe generate-only
    entrypoint; ours mirrors `main_generate.py` + `MiniSWEPPOExp`. The remote-endpoint +
    `run_engines_locally=false` + `colocate_all=false` combo isn't exercised by SkyRL's scripts —
@@ -197,7 +200,14 @@ per-instance images, but a good latency optimization for the single-image multip
 5. **Multiplication task is contrived.** Reward verification runs in the sandbox to exercise
    `commands.run`; the task itself doesn't *need* a sandbox. A tool-use variant (model issues shell
    commands, env runs them) is a natural, more realistic extension.
-6. **Warm pool not wired.** Plain `create_sandbox(template=…)` for now; warm-pool adoption is a
-   documented latency optimization (and its exact CRD schema needs cluster confirmation).
+6. **Warm pool is required (0.5.x) and wired.** `create_sandbox(warmpool=…)` needs a `SandboxWarmPool`
+   — shipped as `infra/manifests/sandbox-warmpool-multiplication.yaml` (`replicas: 2`, referencing the
+   template). Size `replicas` to peak concurrent trajectories; its v1beta1 fields mirror the upstream
+   `extensions/examples/` (confirm against your installed `extensions.yaml`).
 7. **Nothing run on a cluster / no OpenAI call made here.** Static checks only (compile/import).
    Dotted-path renames updated in our configs + smoke test; external references to old paths are stale.
+8. **SDK ↔ controller version coupling (0.5.x / v1beta1).** Pinned `k8s-agent-sandbox>=0.5.0,<0.6` (lock
+   the minor, patch floats; venv verified: 0.5.0 → `v1beta1`, `create_sandbox(warmpool=…)`). The
+   mini-swe backend reads GVK from the SDK `constants` so it auto-tracks, but the cluster's
+   `AGENT_SANDBOX_VERSION` controller must serve **v1beta1** (true for `latest`; do **not** pin it to a
+   v1alpha1-era release).

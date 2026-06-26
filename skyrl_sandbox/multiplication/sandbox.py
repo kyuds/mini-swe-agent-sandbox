@@ -5,16 +5,18 @@ image, so that backend POSTs a raw ``Sandbox`` CR (no template) and execs via th
 API. The multiplication task uses **one fixed image**, so here we use the agent-sandbox Python SDK's
 high-level API:
 
-* spawn from a **SandboxTemplate** via ``SandboxClient.create_sandbox(template=...)``
-  (optionally adopting from a warm pool), and
+* adopt a sandbox from a **SandboxWarmPool** via ``SandboxClient.create_sandbox(warmpool=...)`` — in the
+  0.5.x SDK the create path is warmpool-based: claim -> SandboxWarmPool -> SandboxTemplate (there is no
+  per-call template arg); and
 * execute via ``sandbox.commands.run(...)`` -> ``ExecutionResult(stdout, stderr, exit_code)``, which
   POSTs to the in-image ``:8888`` runtime server.
 
 See ``docs/expansion-plan.md`` §2 and ``docs/agent-sandbox-research.md``.
 
-**CAVEAT (blocker until set):** the SandboxTemplate's image MUST ship the agent-sandbox ``:8888``
-runtime server — that's what ``commands.run`` talks to. See
-``infra/manifests/sandbox-template-multiplication.yaml`` (image is a placeholder there).
+**CAVEAT (blocker until set):** the SandboxTemplate's image (referenced by the warm pool) MUST ship the
+agent-sandbox ``:8888`` runtime server — that's what ``commands.run`` talks to. See
+``infra/manifests/sandbox-template-multiplication.yaml`` (image placeholder) +
+``sandbox-warmpool-multiplication.yaml`` (the pool that references it).
 """
 
 from __future__ import annotations
@@ -34,11 +36,8 @@ from k8s_agent_sandbox.sandbox_client import SandboxClient
 class MultiplicationSandboxConfig:
     """Knobs for the SDK-driven sandbox (overridable from the YAML ``environment:`` block)."""
 
-    template: str = "multiplication-template"
-    """SandboxTemplate name; must match infra/manifests/sandbox-template-multiplication.yaml."""
+    warmpool: str = "multiplication-pool"
     namespace: str = "skyrl-sandboxes"
-    warmpool: Optional[str] = None
-    """Warm-pool policy (e.g. "default") once a WarmPool CR exists; None = cold create. See research doc."""
     sandbox_ready_timeout: int = 300
     command_timeout: int = 60
     in_cluster: bool = True
@@ -68,12 +67,11 @@ class MultiplicationSandbox:
         return self._sandbox.claim_name if self._sandbox is not None else None
 
     def start(self) -> None:
-        """Spawn the sandbox from the template (Claim -> Template -> Sandbox), wait Ready."""
+        """Adopt a sandbox from the warm pool (claim -> SandboxWarmPool -> SandboxTemplate), wait Ready."""
         self._sandbox = self._client.create_sandbox(
-            template=self.config.template,
+            warmpool=self.config.warmpool,
             namespace=self.config.namespace,
             sandbox_ready_timeout=self.config.sandbox_ready_timeout,
-            warmpool=self.config.warmpool,
         )
         self.logger.info("multiplication sandbox ready (claim=%s)", self._sandbox.claim_name)
 

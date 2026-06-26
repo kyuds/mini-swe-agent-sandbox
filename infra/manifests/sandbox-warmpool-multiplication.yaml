@@ -1,0 +1,24 @@
+# SandboxWarmPool for the multiplication example (0.5.x SDK model).
+#
+# In k8s-agent-sandbox >=0.5.0 the SDK create path is warmpool-based: SandboxClient.create_sandbox(
+# warmpool="multiplication-pool") writes a SandboxClaim with spec.warmPoolRef.name -> THIS pool, which
+# pre-provisions `replicas` pods from `sandboxTemplateRef` so each claim adopts a ready one (no per-call
+# template arg exists). Apply the template first, then this:
+#   kubectl apply -f infra/manifests/sandbox-template-multiplication.yaml
+#   kubectl apply -f infra/manifests/sandbox-warmpool-multiplication.yaml
+#
+# `replicas` is how many sandboxes are kept warm — size it to your peak concurrent trajectories (a warm
+# pool is single-image by design: it can only pre-warm THIS one template's image; see
+# docs/agent-sandbox-research.md). Bump it for throughput; 2 is fine for the smoke/generate test.
+apiVersion: extensions.agents.x-k8s.io/v1beta1
+kind: SandboxWarmPool
+metadata:
+  name: multiplication-pool
+  namespace: skyrl-sandboxes
+spec:
+  updateStrategy:
+    type: Recreate
+  replicas: 2
+  sandboxTemplateRef:
+    # Must exactly match metadata.name of sandbox-template-multiplication.yaml.
+    name: multiplication-template

@@ -1,29 +1,30 @@
-# SandboxTemplate for the multiplication example — a SINGLE fixed image spawned via the agent-sandbox
-# SDK: SandboxClient.create_sandbox(template="multiplication-template") -> commands.run (in-image :8888).
-# This is the opposite of the mini-swe backend (per-instance image, raw Sandbox CR, pod-exec).
-#
+# SandboxTemplate for the multiplication example (single fixed image; gVisor; no API token).
+# 0.5.x model: this template is referenced by sandbox-warmpool-multiplication.yaml (a SandboxWarmPool),
+# and the SDK spawns via SandboxClient.create_sandbox(warmpool="multiplication-pool") -> claim ->
+# warmpool -> THIS template -> Sandbox, then commands.run hits the in-image :8888 server. Apply BOTH:
 #   kubectl apply -f infra/manifests/sandbox-template-multiplication.yaml
+#   kubectl apply -f infra/manifests/sandbox-warmpool-multiplication.yaml
+# (Opposite of the mini-swe backend, which uses a per-instance raw Sandbox CR + pod-exec.)
 #
-# Requires the extensions CRDs (SandboxTemplate/SandboxClaim/WarmPool) — installed by default
+# Requires the extensions CRDs (SandboxTemplate/SandboxClaim/SandboxWarmPool) — installed by default
 # (INSTALL_AGENT_SANDBOX_EXTENSIONS=true in infra/.env, applied by 04-install-agent-sandbox.sh).
 #
 # THE RUNTIME IMAGE (answers "what's the default image?"): there is NO published default. The image that
 # serves the :8888 HTTP API commands.run POSTs to is a reference FastAPI server you BUILD yourself from
 # agent-sandbox's examples/python-runtime-sandbox/ (FROM python:3.14-slim; main.py exposes
-# POST /execute -> {stdout, stderr, exit_code} on :8888). Upstream templates literally use
-# `IMAGE_PLACEHOLDER` / `sandbox-runtime:latest` (a locally-built tag). To use it on GKE:
+# POST /execute -> {stdout, stderr, exit_code} on :8888, runs as non-root USER 1000). Upstream templates
+# literally use `IMAGE_PLACEHOLDER` / `sandbox-runtime:latest` (a locally-built tag). On GKE:
 #   git clone https://github.com/kubernetes-sigs/agent-sandbox && cd agent-sandbox/examples/python-runtime-sandbox
 #   docker build -t <REGION>-docker.pkg.dev/<PROJECT_ID>/<REPO>/sandbox-runtime:latest .
 #   docker push  <REGION>-docker.pkg.dev/<PROJECT_ID>/<REPO>/sandbox-runtime:latest
-# then set `image:` below to that ref. (For a kind smoke: `docker build -t sandbox-runtime .` + `kind load
-# docker-image sandbox-runtime:latest`.) You can also bring your own image — it just has to serve the same
-# POST /execute contract on :8888. Left as a placeholder so a wrong image can't silently "succeed".
+# then set `image:` below. (kind smoke: `docker build -t sandbox-runtime .` + `kind load docker-image
+# sandbox-runtime:latest`.) Any image serving the same POST /execute contract on :8888 works. Left as a
+# placeholder so a wrong image can't silently "succeed".
 #
-# CAVEAT — apiVersion skew: this uses v1alpha1 to match the pinned SDK (k8s-agent-sandbox==0.4.6, whose
-# constants + the SandboxClaim it writes are v1alpha1) and the version this repo verified the cluster
-# serves. Upstream HEAD examples already use v1beta1, so if AGENT_SANDBOX_VERSION=latest installs a CRD
-# that drops v1alpha1, either pin AGENT_SANDBOX_VERSION to a v1alpha1 release or bump the SDK to match.
-apiVersion: extensions.agents.x-k8s.io/v1alpha1
+# GVK: v1beta1 — matches the pinned SDK (k8s-agent-sandbox>=0.5.0,<0.6, whose constants + the
+# SandboxClaim it writes are v1beta1). The cluster's AGENT_SANDBOX_VERSION controller must serve v1beta1
+# (true for `latest`).
+apiVersion: extensions.agents.x-k8s.io/v1beta1
 kind: SandboxTemplate
 metadata:
   name: multiplication-template
@@ -50,8 +51,8 @@ spec:
           # (The mini-swe pod-exec backend uses `sleep infinity`; commands.run needs the live server.)
           ports:
             - containerPort: 8888
-          # Gate readiness on the server being up, so create_sandbox()'s Ready wait means commands.run
-          # will connect (mirrors the upstream python-sandbox-template). Drop if your image has no GET /.
+          # Gate readiness on the server being up, so a warm pod is only adopted once commands.run can
+          # connect (mirrors the upstream python-sandbox-template). Drop if your image has no GET /.
           readinessProbe:
             httpGet:
               path: "/"
