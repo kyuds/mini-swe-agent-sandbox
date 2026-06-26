@@ -30,6 +30,15 @@ class MiniSWEGeneratorConfig(GeneratorConfig):
 
     miniswe_config_path: str = ""
     miniswe_traj_dir: str = ""
+    miniswe_litellm_model_name: str = ""
+    """Optional: the **full, provider-qualified litellm model id** sent to litellm, used verbatim and
+    DECOUPLED from ``trainer.policy.model.path`` (which must stay a valid HF id because it loads the
+    tokenizer). Use the native litellm provider prefix — e.g. ``fireworks_ai/accounts/fireworks/models/
+    qwen3-...`` (auth via ``FIREWORKS_AI_API_KEY``) or ``openai/gpt-4o-mini`` (auth via ``OPENAI_API_KEY``).
+    Empty = ``openai/<model.path>`` (the SkyRL local-vLLM default: litellm's openai provider against the
+    in-process vLLM HTTP server via ``OPENAI_BASE_URL`` — the training path). NOTE: for a hosted model the
+    tokenizer (from ``model.path``) is a stand-in that won't match the served model — fine for
+    generation/eval (token-id bookkeeping only), not for training."""
 
 
 class DefaultAgentWithReminder(DefaultAgent):
@@ -136,7 +145,10 @@ class MiniSweAgentGenerator(SkyRLGymGenerator):
         self.generator_cfg = generator_cfg
         self.tokenizer = tokenizer
         self.model_name = model_name
-        self.litellm_model_name = "openai/" + self.model_name
+        # Full provider-qualified litellm model id (used verbatim), decoupled from model.path (the
+        # tokenizer). Empty -> openai/<model.path> (SkyRL local-vLLM default). See
+        # MiniSWEGeneratorConfig.miniswe_litellm_model_name.
+        self.litellm_model_name = generator_cfg.miniswe_litellm_model_name or ("openai/" + self.model_name)
 
         if self.generator_cfg.chat_template.name_or_path is not None:
             raise NotImplementedError("MiniSWEAgentGenerator doesn't support custom chat template")

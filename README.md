@@ -42,9 +42,16 @@ Cluster (shared by both examples): `cd infra && cp .env.example .env && $EDITOR 
 uv run python -m skyrl_sandbox.mini_swe_agent.preprocess --output_dir ~/data/swe_gym_subset
 # train (GPUs)
 bash scripts/mini_swe_agent/run_mini_swe_agent_sandbox.sh
-# OR generate-only against a remote OpenAI-compatible endpoint (no GPUs, no training):
-OPENAI_API_KEY=sk-... OPENAI_BASE_URL=<endpoint>/v1 bash scripts/mini_swe_agent/run_generate_openai.sh
+# OR generate-only against a remote endpoint (Qwen via Fireworks, litellm native provider; no GPUs):
+FIREWORKS_AI_API_KEY=fw-... bash scripts/mini_swe_agent/run_generate_fireworks.sh
 ```
+
+**Two LLM backends, one generator.** Training serves the policy on **your own vLLM** (H100s) via
+SkyRL's in-process inference engine — an OpenAI-compatible HTTP endpoint reached with litellm's
+`openai/` provider (`OPENAI_BASE_URL`, see [`.env.miniswe`](.env.miniswe)). The no-GPU generation demo
+uses **Fireworks** via litellm's native `fireworks_ai/` provider. The generator switches between them
+with `generator.miniswe_litellm_model_name`: empty → `openai/<model.path>` (local vLLM / training);
+`fireworks_ai/…` → Fireworks (generation).
 
 Backend selected by `environment_class:
 "skyrl_sandbox.mini_swe_agent.environment.AgentSandboxEnvironment"` in
@@ -60,14 +67,18 @@ uv run python -m skyrl_sandbox.multiplication.dataset --output_dir ~/data/multip
 # runtime image (see caveat). 0.5.x spawns via the pool: claim -> SandboxWarmPool -> SandboxTemplate.
 kubectl apply -f infra/manifests/sandbox-template-multiplication.yaml
 kubectl apply -f infra/manifests/sandbox-warmpool-multiplication.yaml
-# generate-only against a remote endpoint (run inside the cluster; no GPUs):
-OPENAI_API_KEY=sk-... OPENAI_BASE_URL=<endpoint>/v1 bash scripts/multiplication/run_generate_multiply.sh
-# OR full GRPO training (GPUs):
+# full GRPO training (GPUs) -- the simplest agent-sandbox demo for this example (rollouts exercise commands.run):
 bash scripts/multiplication/run_multiply_sandbox.sh
+# OR generate-only against YOUR OWN vLLM (HOST:PORT, no auth — see note below; not Fireworks):
+REMOTE_URL=HOST:8000 bash scripts/multiplication/run_generate_multiply.sh
 ```
 
 Each trajectory adopts a `Sandbox` from the `multiplication-pool` warm pool (→ `multiplication-template`)
 via `create_sandbox(warmpool=…)` and computes/verifies the product with the SDK's `commands.run`.
+**LLM path:** unlike mini-swe (which calls litellm and can use Fireworks), multiplication uses SkyRL's
+**default** generator → `RemoteInferenceEngine`, which sends no auth header — so it only talks to your
+own no-auth vLLM (`remote_urls`), not Fireworks. The natural demo here is **training** (local vLLM);
+generation needs your own vLLM endpoint.
 **Caveat:** the template image must ship the agent-sandbox `:8888` runtime server (left as a placeholder
 in the manifest on purpose — there is no published default; build it from agent-sandbox's
 `examples/python-runtime-sandbox/`) — see

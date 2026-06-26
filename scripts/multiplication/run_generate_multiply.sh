@@ -1,35 +1,38 @@
 #!/usr/bin/env bash
-# Generate-only run of the multiplication example on agent-sandbox (NO training, NO GPUs).
-# Demonstrates the agent-sandbox SDK path: each trajectory spawns a Sandbox from the
-# "multiplication-template" SandboxTemplate and verifies the product with commands.run.
-# The LLM is reached via litellm -> OPENAI_BASE_URL (remote endpoint); Ray runs in-process. See
-# docs/expansion-plan.md §2.
+# Generate-only run of the multiplication example on agent-sandbox (NO training). Each trajectory spawns
+# a Sandbox from the "multiplication-pool" warm pool and verifies the product with the SDK's commands.run.
+#
+# LLM PATH (important — differs from mini-swe): the multiplication example uses SkyRL's DEFAULT generator
+# -> RemoteInferenceEngine, which posts to generator.inference_engine.remote_urls and sends NO auth
+# header. So it ONLY works against a NO-AUTH, OpenAI-compatible endpoint (your own vLLM) -- it CANNOT use
+# Fireworks/OpenAI, which require an API key the engine can't send. (The mini-swe example calls litellm
+# directly, which is why IT can use Fireworks; multiplication can't.)
+#   * For a hosted/no-GPU demo, use the mini-swe example (run_generate_fireworks.sh).
+#   * For multiplication, either point REMOTE_URL at your own vLLM (below), or just run training
+#     (scripts/multiplication/run_multiply_sandbox.sh) -- training exercises the SAME commands.run path
+#     during rollouts, so it's the simpler agent-sandbox demo for this example.
 #
 # Prereqs:
-#   - infra/up-smoke.sh up (CPU cluster + agent-sandbox + RBAC); the extensions CRDs are installed by
-#     default, so SandboxTemplate/Claim work.
-#   - kubectl apply -f infra/manifests/sandbox-template-multiplication.yaml  (after setting its image! see caveat)
+#   - infra/up-smoke.sh up + extensions CRDs; apply sandbox-template + sandbox-warmpool manifests (set the image!).
 #   - uv run python -m skyrl_sandbox.multiplication.dataset --output_dir "$DATA_DIR"
-#   - OPENAI_API_KEY exported.
-#   - Run this INSIDE the cluster (a runner pod) so commands.run reaches the sandbox pod IP. For a laptop
-#     run you must make the env use a kubectl tunnel (sandbox in_cluster=false) -- see caveat in
-#     skyrl_sandbox/multiplication/sandbox.py.
-#
-# Same MODEL/tokenizer caveat as the mini-swe generate script (MODEL must be a valid HF id).
+#   - REMOTE_URL = HOST:PORT of a running OpenAI-compatible vLLM serving $MODEL (NO http:// — the engine
+#     prepends it), reachable from the generator. No auth.
+#   - Run INSIDE the cluster (runner pod) so commands.run reaches the sandbox pod IP (else set the env's
+#     in_cluster=false for a kubectl tunnel -- see skyrl_sandbox/multiplication/sandbox.py).
 set -euo pipefail
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$REPO_DIR"
 
-: "${OPENAI_API_KEY:?set OPENAI_API_KEY to your token}"
-MODEL="${MODEL:-Qwen/Qwen3-4B}"
+MODEL="${MODEL:-Qwen/Qwen2.5-1.5B-Instruct}"                 # HF id the vLLM serves (also the tokenizer)
+REMOTE_URL="${REMOTE_URL:?set REMOTE_URL to your OpenAI-compatible vLLM as HOST:PORT (no http://)}"
 DATA_DIR="${DATA_DIR:-$HOME/data/multiply_sandbox}"
-export OPENAI_BASE_URL="${OPENAI_BASE_URL:-https://api.openai.com/v1}"   # set to your endpoint serving $MODEL
 
 uv run --extra fsdp python -m skyrl_sandbox.multiplication.generate \
   data.val_data="['$DATA_DIR/validation.parquet']" \
   environment.env_class=multiply_sandbox \
   trainer.policy.model.path="$MODEL" \
   generator.inference_engine.run_engines_locally=false \
+  generator.inference_engine.remote_urls="['$REMOTE_URL']" \
   trainer.placement.colocate_all=false \
   generator.batched=false \
   trainer.eval_batch_size="${EVAL_BATCH_SIZE:-2}" \

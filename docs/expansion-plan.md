@@ -79,11 +79,17 @@ A generate-only entrypoint = `EvalOnlyEntrypoint`'s skeleton + `MiniSWEPPOExp`'s
   dataloader, calls `evaluate(...)`, logs metrics.
 - `main()`: `MiniSWEConfig.from_cli_overrides`, `validate`, `initialize_ray`,
   `ray.get(eval_entrypoint.remote(cfg))`.
-- Launch script `scripts/mini_swe_agent/run_generate_openai.sh` sets, via `--env-file`:
-  `OPENAI_BASE_URL=https://api.openai.com/v1`, `OPENAI_API_KEY=$OPENAI_API_KEY`,
-  `LITELLM_MODEL_REGISTRY_PATH=configs/mini_swe_agent/litellm.json`; CLI overrides set
-  `trainer.policy.model.path=<model with an openai/ entry in litellm.json>`,
-  `run_engines_locally=false`, `colocate_all=false`, the eval dataset path, and a tiny batch.
+- Launch script `scripts/mini_swe_agent/run_generate_fireworks.sh` (Qwen via Fireworks) uses litellm's
+  **native `fireworks_ai` provider** — `FIREWORKS_AI_API_KEY` only, no `OPENAI_*` hijack. CLI overrides set
+  `trainer.policy.model.path=Qwen/Qwen3-4B` (tokenizer), `generator.miniswe_litellm_model_name=fireworks_ai/accounts/fireworks/models/<id>`
+  (the **full provider-qualified litellm model id**, used verbatim — see below), `run_engines_locally=false`,
+  `colocate_all=false`, the eval dataset path, and a tiny batch. The generator decouples the litellm
+  model id from `model.path`: the override is used verbatim with its provider prefix
+  (`fireworks_ai/…`, `openai/gpt-4o-mini`, …), and an empty override falls back to `openai/<model.path>`
+  (the SkyRL local-vLLM training path, which is legitimately OpenAI-compatible). The tokenizer is a
+  stand-in for the served model (fine for generation, not training). litellm.json is only an optional
+  cost/context registry — providers are built into litellm and selected by the prefix, so nothing needs
+  adding there to use Fireworks.
 
 **This still requires** the agent-sandbox cluster (the agent's bash runs in a Sandbox pod via our
 backend) + a preprocessed eval dataset. It is a real end-to-end generation, not a unit test.
@@ -191,8 +197,14 @@ multiplication example.
    `run_engines_locally=false` + `colocate_all=false` combo isn't exercised by SkyRL's scripts —
    verify no code path still forces a GPU placement group. A HF tokenizer for `model.path` still loads
    (CPU only).
-3. **`LITELLM_MODEL_REGISTRY_PATH` + `openai/<model>` entry.** The remote model name must have an
-   `openai/<name>` entry in `configs/mini_swe_agent/litellm.json`; verify the path resolves from cwd.
+3. **litellm model id is decoupled from the tokenizer + uses native providers.** `trainer.policy.model.path`
+   (default `Qwen/Qwen3-4B`) loads only the tokenizer (any valid HF id with a chat template); the model
+   actually called is `generator.miniswe_litellm_model_name`, used **verbatim** with its provider prefix
+   — e.g. `fireworks_ai/accounts/fireworks/models/qwen3-4b` (auth `FIREWORKS_AI_API_KEY`; **verify the
+   slug in your Fireworks catalog**) or `openai/gpt-4o-mini` (auth `OPENAI_API_KEY`). Empty override =
+   `openai/<model.path>` (SkyRL local vLLM). For a hosted model the tokenizer is a *stand-in* (fine for
+   generation/eval token bookkeeping, not training). litellm.json is just an optional cost/context
+   registry — you do **not** add providers there; they're built into litellm and chosen by the prefix.
 4. **harbor not literally used.** We mirror harbor's GeneratorInterface architecture and scaffold a
    harbor task-dir, but do not run the external harbor framework (it owns execution internally and
    would need a custom agent-sandbox provider; Python ≥3.12 + provider keys). The harbor-native path
@@ -211,3 +223,12 @@ multiplication example.
    mini-swe backend reads GVK from the SDK `constants` so it auto-tracks, but the cluster's
    `AGENT_SANDBOX_VERSION` controller must serve **v1beta1** (true for `latest`; do **not** pin it to a
    v1alpha1-era release).
+9. **Two LLM backends (the end goal): generation via Fireworks, training via your own vLLM.** Both run
+   through the same code via `generator.miniswe_litellm_model_name`: empty → `openai/<model.path>` →
+   `OPENAI_BASE_URL` = SkyRL's in-process **vLLM** (H100s, OpenAI-compatible) for *training* (litellm
+   correctly tokenizes the real model); `fireworks_ai/…` → Fireworks for the no-GPU *generation* demo.
+   Keep `OPENAI_BASE_URL` (it's the training mechanism, not a hack). **Caveat — multiplication differs:**
+   it uses SkyRL's **default** generator (`RemoteInferenceEngine`), which posts to
+   `generator.inference_engine.remote_urls` and sends **no auth header** — so it can only hit a no-auth
+   vLLM (your own), **not** Fireworks/OpenAI. mini-swe (litellm) gets the hosted-provider path;
+   multiplication's demo is training (local vLLM) or generation against your own vLLM.

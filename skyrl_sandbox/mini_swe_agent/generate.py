@@ -12,8 +12,9 @@ This merges two shipped SkyRL patterns: ``skyrl/train/entrypoints/main_generate.
 ``examples/train/mini_swe_agent/main_mini_swe.py`` (``MiniSWEPPOExp.get_generator`` -- builds the
 ``MiniSweAgentGenerator``). SkyRL ships no mini-swe generate-only entrypoint, so we provide one.
 
-Run via ``scripts/mini_swe_agent/run_generate_openai.sh``. See ``docs/expansion-plan.md`` §1 and its
-caveats (model.path must be a valid HF id for the tokenizer; ``run_engines_locally=false`` +
+Run via ``scripts/mini_swe_agent/run_generate_fireworks.sh`` (Qwen via Fireworks). See
+``docs/expansion-plan.md`` §1 and its caveats (``model.path`` loads the tokenizer and is decoupled from
+the served model via ``generator.miniswe_litellm_model_name``; ``run_engines_locally=false`` +
 ``colocate_all=false`` to avoid a GPU placement group).
 """
 
