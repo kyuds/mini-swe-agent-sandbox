@@ -34,6 +34,6 @@ bash "${SCRIPT_DIR}/05-setup-rbac.sh"
 
 ok "Smoke-test cluster ready: CPU cluster + gVisor sandbox pool + agent-sandbox controller + RBAC."
 log "Now run the smoke test FROM AN IN-CLUSTER POD (as ${SANDBOX_RUNNER_SA}, so RBAC is tested):"
-log "  bash ${SCRIPT_DIR}/../scripts/run_smoke_in_pod.sh        # gVisor ON by default (matches this pool)"
+log "  bash ${SCRIPT_DIR}/../scripts/mini_swe_agent/run_smoke_in_pod.sh        # gVisor ON by default (matches this pool)"
 log "Tear down when done:  ASSUME_YES=1 ${SCRIPT_DIR}/teardown-smoke.sh"
-log "See docs/testing-agent-sandbox.md for the manual steps."
+log "See the smoke-test script headers under scripts/mini_swe_agent/ for the manual steps."

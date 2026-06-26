@@ -8,13 +8,12 @@ Selected purely by config via mini-swe-agent's dotted-path env factory (no SkyRL
 source changes)::
 
     environment:
-      environment_class: "mini_swe_agent_sandbox.environment.AgentSandboxEnvironment"
+      environment_class: "skyrl_sandbox.mini_swe_agent.environment.AgentSandboxEnvironment"
 
 This module is the **mini-swe-agent adapter**: it owns the config schema and the ``Environment``
 protocol (``execute``/``cleanup``/``serialize``). All Kubernetes + agent-sandbox-SDK plumbing —
 creating the ``Sandbox`` CR, waiting for Ready, pod-exec, deletion — lives in :mod:`kubernetes_util`
-(:class:`~mini_swe_agent_sandbox.kubernetes_util.KubernetesSandbox`). See docs/port-plan.md and
-docs/port-guided.md.
+(:class:`~skyrl_sandbox.mini_swe_agent.kubernetes_util.KubernetesSandbox`). See docs/expansion-plan.md.
 
 * **Contract.** mini-swe-agent 1.x calls ``execute(command: str, ...) -> {"output", "returncode"}``.
   We mirror that, and accept the 2.x ``execute(action: dict)`` form defensively. The RL reward is the
@@ -118,7 +117,7 @@ class AgentSandboxEnvironment:
     ):
         # Set first so cleanup()/__del__ are safe even if construction fails early.
         self._sandbox: Optional[KubernetesSandbox] = None
-        self.logger = logger or logging.getLogger("mini_swe_agent_sandbox.environment")
+        self.logger = logger or logging.getLogger("skyrl_sandbox.mini_swe_agent.environment")
 
         # Filter unknown keys so an unrelated YAML field doesn't crash construction.
         known = {f.name for f in dataclasses.fields(config_class)}
@@ -130,7 +129,7 @@ class AgentSandboxEnvironment:
         if not self.config.image:
             raise ValueError(
                 "AgentSandboxEnvironment requires a non-empty `image`; it is normally injected "
-                "per-instance by get_sb_environment() in mini_swe_agent_sandbox/utils.py."
+                "per-instance by get_sb_environment() in skyrl_sandbox/mini_swe_agent/utils.py."
             )
 
         # All Kubernetes / agent-sandbox interaction is delegated to KubernetesSandbox.

@@ -1,75 +1,92 @@
-# mini-swe-agent-sandbox
+# skyrl-sandbox
 
-[mini-swe-agent](https://github.com/SWE-agent/mini-swe-agent) RL fine-tuning with
-[SkyRL](https://github.com/NovaSky-AI/SkyRL) on the
+Run [SkyRL](https://github.com/NovaSky-AI/SkyRL) RL workloads on the
 [kubernetes-sigs/agent-sandbox](https://github.com/kubernetes-sigs/agent-sandbox) backend (GKE) —
-each SWE-bench box runs as an isolated (gVisor) `Sandbox` pod instead of a local Podman container.
+each rollout's sandbox is an isolated (gVisor) `Sandbox` pod instead of a local Podman/Docker
+container. SkyRL is a pip dependency; the SkyRL repo is never modified (its example code is copied in
+and edited).
 
-## What's different from SkyRL's example
+Two examples, one per package folder — they sit at **opposite ends** of the agent-sandbox design space:
 
-Only two things — everything else is the upstream example, verbatim:
-1. **The sandbox backend** is `AgentSandboxEnvironment` (this repo) instead of `DockerEnvironment`,
-   selected by `environment_class` in `configs/swebench_agent_sandbox.yaml`.
-2. **`utils.py: get_sb_environment`** has one extra `elif` that injects the per-instance SWE-bench
-   image for our backend (the upstream only does this for `docker`/`singularity`).
+| | [`skyrl_sandbox/mini_swe_agent`](skyrl_sandbox/mini_swe_agent) | [`skyrl_sandbox/multiplication`](skyrl_sandbox/multiplication) |
+|---|---|---|
+| task | [mini-swe-agent](https://github.com/SWE-agent/mini-swe-agent) SWE-bench | toy `a * b` |
+| image | **per-instance** (thousands) | **one fixed** image |
+| create | raw `Sandbox` CR (no template) | SDK `create_sandbox(template=…)` |
+| execute | Kubernetes **pod-exec** | SDK **`commands.run`** (in-image `:8888`) |
+| needs `:8888` runtime image? | no | **yes** |
 
-> The example targets the mini-swe-agent **1.x** API, so `pyproject.toml` pins `mini-swe-agent<2`
-> (2.x is a breaking change that silently zeroes rewards — see `docs/port-plan.md`).
+The *why* behind the two backends is in [`docs/agent-sandbox-research.md`](docs/agent-sandbox-research.md)
+(template-less create + warm-pool research); the full design + caveats are in
+[`docs/expansion-plan.md`](docs/expansion-plan.md). The mini-swe backend's design lives in the module
+docstrings ([`environment.py`](skyrl_sandbox/mini_swe_agent/environment.py),
+[`kubernetes_util.py`](skyrl_sandbox/mini_swe_agent/kubernetes_util.py)).
 
-## How it works
+Across both, the Ray workers (driving the sandboxes) hold the Kubernetes identity/RBAC; the sandbox
+pods run untrusted model code with **no** API token and gVisor isolation (`infra/05-setup-rbac.sh`).
 
-```
-python -m mini_swe_agent_sandbox.main  (uses SkyRL framework via pip)
-   │  generator.miniswe_config_path → configs/swebench_agent_sandbox.yaml
-   ▼
-mini-swe-agent get_environment (dotted-path) → mini_swe_agent_sandbox.environment.AgentSandboxEnvironment
-   │  __init__: create Sandbox CR (per-instance image, gVisor, no API token), wait Ready
-   ▼
-agent loop / eval → execute(cmd) → k8s pod-exec into the Sandbox pod → {output, returncode}
-   │  cleanup(): delete the Sandbox CR
-   ▼
-agent-sandbox controller + gVisor node pool (from infra/)
-```
-
-The Ray workers (driving the sandboxes) hold the Kubernetes identity/RBAC; the sandbox pods run
-untrusted model bash with **no** API token and gVisor isolation (`infra/05-setup-rbac.sh`).
-
-## Quick start
+## Install
 
 ```bash
-# 1. Stand up the cluster (GKE + KubeRay + agent-sandbox + gVisor pool + RBAC)
-cd infra && cp .env.example .env && $EDITOR .env   # set PROJECT_ID etc.
-./up.sh && cd ..
-
-# 2. Install deps (uv). Light (env + preprocess, any platform):
-uv sync
-#    Full training backend (skyrl[fsdp]; linux/GPU):
-uv sync --extra fsdp
-
-# 3. Prepare data
-uv run python -m mini_swe_agent_sandbox.preprocess --output_dir ~/data/swe_gym_subset
-
-# 4. Train
-bash scripts/run_mini_swe_agent_sandbox.sh
+uv sync                 # light: env backends + dataset prep (any platform)
+uv sync --extra fsdp    # full SkyRL training backend (skyrl[fsdp]; linux/GPU)
 ```
+
+Cluster (shared by both examples): `cd infra && cp .env.example .env && $EDITOR .env` (set
+`PROJECT_ID`), then `./up.sh` (GKE + KubeRay + agent-sandbox + gVisor pool + RBAC).
+
+## Example 1 — mini-swe-agent (SWE-bench)
+
+```bash
+# data
+uv run python -m skyrl_sandbox.mini_swe_agent.preprocess --output_dir ~/data/swe_gym_subset
+# train (GPUs)
+bash scripts/mini_swe_agent/run_mini_swe_agent_sandbox.sh
+# OR generate-only against a remote OpenAI-compatible endpoint (no GPUs, no training):
+OPENAI_API_KEY=sk-... OPENAI_BASE_URL=<endpoint>/v1 bash scripts/mini_swe_agent/run_generate_openai.sh
+```
+
+Backend selected by `environment_class:
+"skyrl_sandbox.mini_swe_agent.environment.AgentSandboxEnvironment"` in
+[`configs/mini_swe_agent/swebench_agent_sandbox.yaml`](configs/mini_swe_agent/swebench_agent_sandbox.yaml).
+The example targets the mini-swe-agent **1.x** API, so `pyproject.toml` pins `mini-swe-agent<2`.
+
+## Example 2 — multiplication (single image, agent-sandbox SDK)
+
+```bash
+# data
+uv run python -m skyrl_sandbox.multiplication.dataset --output_dir ~/data/multiply_sandbox
+# apply the SandboxTemplate -- FIRST set its image to an agent-sandbox :8888 runtime image (see caveat):
+kubectl apply -f infra/manifests/sandbox-template-multiplication.yaml
+# generate-only against a remote endpoint (run inside the cluster; no GPUs):
+OPENAI_API_KEY=sk-... OPENAI_BASE_URL=<endpoint>/v1 bash scripts/multiplication/run_generate_multiply.sh
+# OR full GRPO training (GPUs):
+bash scripts/multiplication/run_multiply_sandbox.sh
+```
+
+Each trajectory spawns a `Sandbox` from `multiplication-template` and computes/verifies the product
+with the SDK's `commands.run`. **Caveat:** the template image must ship the agent-sandbox `:8888`
+runtime server (left as a placeholder in the manifest on purpose) — see
+[`docs/expansion-plan.md`](docs/expansion-plan.md) §5. *(harbor was researched as the harness; it owns
+execution internally and would need a custom agent-sandbox provider, so we mirror its `GeneratorInterface`
+architecture instead — see the plan §2.)*
 
 ## Testing the agent-sandbox part (no GPUs)
-Validate the whole sandbox contract on a cheap **CPU** cluster — no H100s, no SkyRL training:
+
+Validate the mini-swe sandbox contract on a cheap **CPU** cluster — no H100s, no SkyRL training:
 ```bash
 cd infra && ASSUME_YES=1 ./up-smoke.sh    # CPU cluster + gVisor sandbox pool + agent-sandbox + RBAC (no GPU/KubeRay)
-cd .. && bash scripts/run_smoke_in_pod.sh # run the test IN-CLUSTER as the runner SA (RBAC + gVisor exercised)
-# teardown when done:  ASSUME_YES=1 infra/teardown-smoke.sh
+cd .. && bash scripts/mini_swe_agent/run_smoke_in_pod.sh   # runs IN-CLUSTER as the runner SA (RBAC + gVisor exercised)
+# teardown:  ASSUME_YES=1 infra/teardown-smoke.sh
 ```
-`run_smoke_in_pod.sh` spins up a pod running as `skyrl-sandbox-runner`, syncs this repo in, and runs the
-test there (gVisor on by default) — so create → `execute()` → cleanup is driven exactly as a SkyRL Ray
-worker would (in-cluster token + RBAC, sandboxes on the gVisor pool), minus the GPU/LLM half.
-
-To leave the Sandbox running at the end for manual inspection, pass `--keep` through `SMOKE_ARGS`:
+`run_smoke_in_pod.sh` runs the test from a pod as `skyrl-sandbox-runner`, so create → `execute()` →
+cleanup is driven exactly as a SkyRL Ray worker would. Leave the Sandbox up for inspection with
+`SMOKE_ARGS="--keep"`:
 ```bash
-SMOKE_ARGS="--keep" bash scripts/run_smoke_in_pod.sh
-# then, from your laptop (admin kubeconfig), view and clean it up:
-kubectl -n skyrl-sandboxes get sandboxes.agents.x-k8s.io -l app=mini-swe-agent-sandbox
-kubectl -n skyrl-sandboxes delete sandbox -l app=mini-swe-agent-sandbox   # when done
+SMOKE_ARGS="--keep" bash scripts/mini_swe_agent/run_smoke_in_pod.sh
+kubectl -n skyrl-sandboxes get sandboxes.agents.x-k8s.io -l app=mini-swe-agent-sandbox   # view
+kubectl -n skyrl-sandboxes delete sandbox -l app=mini-swe-agent-sandbox                  # clean up
 ```
-See `docs/testing-agent-sandbox.md` for the manual ssh/rsync steps, a laptop-only run, the phase →
-SkyRL-usage map, and a `kubectl` fallback.
+The per-phase detail, a laptop-only mode, and a `kubectl` fallback live in the headers of
+[`smoke_test_agent_sandbox.py`](scripts/mini_swe_agent/smoke_test_agent_sandbox.py) and
+[`run_smoke_in_pod.sh`](scripts/mini_swe_agent/run_smoke_in_pod.sh).

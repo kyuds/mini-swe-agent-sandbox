@@ -7,13 +7,13 @@ set -x
 # Prerequisites:
 #   1. Cluster up:  (cd infra && ./up.sh)     # GKE + KubeRay + agent-sandbox + gVisor pool + RBAC
 #   2. Deps:        uv sync --extra fsdp       # installs skyrl[fsdp] + this package (linux/GPU)
-#   3. Data:        uv run python -m mini_swe_agent_sandbox.preprocess --output_dir "$DATA_DIR"
+#   3. Data:        uv run python -m skyrl_sandbox.mini_swe_agent.preprocess --output_dir "$DATA_DIR"
 #   4. Ray worker pods run as the SANDBOX_RUNNER_SA identity (infra/05-setup-rbac.sh).
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_DIR"
 
-CONFIG="${CONFIG:-$REPO_DIR/configs/swebench_agent_sandbox.yaml}"
+CONFIG="${CONFIG:-$REPO_DIR/configs/mini_swe_agent/swebench_agent_sandbox.yaml}"
 ENV_FILE="${ENV_FILE:-$REPO_DIR/.env.miniswe}"
 DATA_DIR="${DATA_DIR:-$HOME/data/swe_gym_subset}"
 CKPT_PATH="${CKPT_PATH:-$HOME/ckpts/llm_mini_swe}"
@@ -27,7 +27,7 @@ LOGGER=wandb
 
 # `uv run --extra fsdp` resolves this project (skyrl[fsdp] + mini-swe-agent<2 + kubernetes) from
 # pyproject.toml and runs our entrypoint; the agent-sandbox env is selected by the config YAML.
-uv run --extra fsdp --env-file "$ENV_FILE" python -m mini_swe_agent_sandbox.main \
+uv run --extra fsdp --env-file "$ENV_FILE" python -m skyrl_sandbox.mini_swe_agent.main \
   data.train_data="['$DATA_DIR/train.parquet']" \
   data.val_data="['$DATA_DIR/validation.parquet']" \
   trainer.algorithm.advantage_estimator="grpo" \

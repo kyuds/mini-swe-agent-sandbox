@@ -1,0 +1,88 @@
+"""Generate-only entrypoint for the mini-swe-agent example (rollouts, NO training).
+
+Runs ONLY the SkyRL generator against an OpenAI-compatible endpoint, so you can validate the
+mini-swe-agent + agent-sandbox path end-to-end **without GPUs or weight updates**:
+
+* the LLM is called by litellm via ``OPENAI_BASE_URL`` (point it at a remote endpoint -> no local vLLM/GPU);
+* the agent's bash runs in agent-sandbox ``Sandbox`` pods via ``AgentSandboxEnvironment``;
+* Ray is initialised in-process (local mode) -- no KubeRay cluster needed.
+
+This merges two shipped SkyRL patterns: ``skyrl/train/entrypoints/main_generate.py``
+(``EvalOnlyEntrypoint`` -- builds only the inference client + generator and calls ``evaluate``) and
+``examples/train/mini_swe_agent/main_mini_swe.py`` (``MiniSWEPPOExp.get_generator`` -- builds the
+``MiniSweAgentGenerator``). SkyRL ships no mini-swe generate-only entrypoint, so we provide one.
+
+Run via ``scripts/mini_swe_agent/run_generate_openai.sh``. See ``docs/expansion-plan.md`` §1 and its
+caveats (model.path must be a valid HF id for the tokenizer; ``run_engines_locally=false`` +
+``colocate_all=false`` to avoid a GPU placement group).
+"""
+
+import asyncio
+import sys
+
+import ray
+from skyrl.train.config import SkyRLGymConfig, make_config
+from skyrl.train.entrypoints.main_base import BasePPOExp
+from skyrl.train.evaluate import evaluate, evaluate_step_wise
+from skyrl.train.utils import initialize_ray
+from skyrl.train.utils.trainer_utils import build_dataloader
+from skyrl.train.utils.utils import validate_generator_cfg
+from skyrl.backends.skyrl_train.inference_engines.base import InferenceEngineInterface
+
+from .generator import MiniSweAgentGenerator, MiniSWEGeneratorConfig
+
+MiniSWEConfig = make_config(generator_cls=MiniSWEGeneratorConfig)
+
+
+class MiniSWEGenerateExp(BasePPOExp):
+    """Eval/generate-only: build just the generator + inference client, run ``evaluate``, no trainer."""
+
+    def get_train_dataset(self):
+        # No training data: this avoids BasePPOExp requiring data.train_data for a generate-only run.
+        return None
+
+    def get_generator(self, cfg, tokenizer, inference_engine_client):
+        # Same construction as MiniSWEPPOExp.get_generator (examples/train/mini_swe_agent).
+        return MiniSweAgentGenerator(
+            generator_cfg=cfg.generator,
+            skyrl_gym_cfg=SkyRLGymConfig(max_env_workers=0),
+            inference_engine_client=inference_engine_client,
+            tokenizer=tokenizer,
+            model_name=self.cfg.trainer.policy.model.path,
+        )
+
+    async def run(self, inference_engine_client: InferenceEngineInterface) -> dict:
+        assert self.eval_dataset is not None, "generate-only requires an eval dataset (set data.val_data)"
+        await inference_engine_client.wake_up()
+        generator = self.get_generator(self.cfg, self.tokenizer, inference_engine_client)
+
+        eval_fn = evaluate_step_wise if self.cfg.generator.step_wise_trajectories else evaluate
+        results = await eval_fn(
+            eval_dataloader=build_dataloader(self.cfg, self.eval_dataset, is_train=False),
+            generator=generator,
+            cfg=self.cfg,
+            global_step=None,
+            tokenizer=self.tokenizer,
+        )
+        self.get_tracker().log(results, step=0, commit=True)
+        return results
+
+
+@ray.remote(num_cpus=1)
+def generate_entrypoint(cfg) -> dict:
+    exp = MiniSWEGenerateExp(cfg)
+    # Build the inference client from a sync context (mirrors main_generate.py's eval_entrypoint).
+    inference_engine_client = exp.get_inference_client()
+    return asyncio.run(exp.run(inference_engine_client))
+
+
+def main() -> None:
+    cfg = MiniSWEConfig.from_cli_overrides(sys.argv[1:])
+    validate_generator_cfg(cfg)
+    initialize_ray(cfg)
+    metrics = ray.get(generate_entrypoint.remote(cfg))
+    print(f"[mini-swe generate-only] metrics: {metrics}")
+
+
+if __name__ == "__main__":
+    main()

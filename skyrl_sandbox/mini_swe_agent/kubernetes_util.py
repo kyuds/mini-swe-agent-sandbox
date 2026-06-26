@@ -7,7 +7,7 @@ lifecycle::
 
     create the Sandbox CR  →  wait for Ready  →  resolve its pod  →  pod-exec  →  delete the CR
 
-Design (rationale in docs/port-plan.md and docs/port-guided.md):
+Design (rationale in docs/expansion-plan.md):
 
 * **Uses the agent-sandbox SDK for lifecycle, not spawn-by-template.** We build on the SDK's
   ``K8sHelper`` (its in/out-of-cluster config + API clients + tested readiness watch) and its
@@ -92,7 +92,7 @@ class KubernetesSandbox:
 
     def __init__(self, config: Any, logger: logging.Logger | None = None):
         self.config = config
-        self.logger = logger or logging.getLogger("mini_swe_agent_sandbox.kubernetes_util")
+        self.logger = logger or logging.getLogger("skyrl_sandbox.mini_swe_agent.kubernetes_util")
 
         # State (set defensively so a partially-constructed sandbox deletes safely).
         self.sandbox_name: Optional[str] = None

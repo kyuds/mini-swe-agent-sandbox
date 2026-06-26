@@ -28,7 +28,7 @@ def get_sb_environment(config: dict, instance: dict, data_source: str) -> Enviro
         env_config["image"] = f"docker://{image_name}"
     elif env_config["environment_class"].endswith("AgentSandboxEnvironment"):
         # kubernetes-sigs/agent-sandbox backend: same per-instance image as docker, pulled by the
-        # Sandbox pod. See mini_swe_agent_sandbox/environment.py.
+        # Sandbox pod. See skyrl_sandbox/mini_swe_agent/environment.py.
         env_config["image"] = image_name
     env = get_environment(env_config)
     if startup_command := config.get("run", {}).get("env_startup_command"):

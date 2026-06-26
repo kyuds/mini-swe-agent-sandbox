@@ -1,0 +1,69 @@
+# SandboxTemplate for the multiplication example — a SINGLE fixed image spawned via the agent-sandbox
+# SDK: SandboxClient.create_sandbox(template="multiplication-template") -> commands.run (in-image :8888).
+# This is the opposite of the mini-swe backend (per-instance image, raw Sandbox CR, pod-exec).
+#
+#   kubectl apply -f infra/manifests/sandbox-template-multiplication.yaml
+#
+# Requires the extensions CRDs (SandboxTemplate/SandboxClaim/WarmPool) — installed by default
+# (INSTALL_AGENT_SANDBOX_EXTENSIONS=true in infra/.env, applied by 04-install-agent-sandbox.sh).
+#
+# THE RUNTIME IMAGE (answers "what's the default image?"): there is NO published default. The image that
+# serves the :8888 HTTP API commands.run POSTs to is a reference FastAPI server you BUILD yourself from
+# agent-sandbox's examples/python-runtime-sandbox/ (FROM python:3.14-slim; main.py exposes
+# POST /execute -> {stdout, stderr, exit_code} on :8888). Upstream templates literally use
+# `IMAGE_PLACEHOLDER` / `sandbox-runtime:latest` (a locally-built tag). To use it on GKE:
+#   git clone https://github.com/kubernetes-sigs/agent-sandbox && cd agent-sandbox/examples/python-runtime-sandbox
+#   docker build -t <REGION>-docker.pkg.dev/<PROJECT_ID>/<REPO>/sandbox-runtime:latest .
+#   docker push  <REGION>-docker.pkg.dev/<PROJECT_ID>/<REPO>/sandbox-runtime:latest
+# then set `image:` below to that ref. (For a kind smoke: `docker build -t sandbox-runtime .` + `kind load
+# docker-image sandbox-runtime:latest`.) You can also bring your own image — it just has to serve the same
+# POST /execute contract on :8888. Left as a placeholder so a wrong image can't silently "succeed".
+#
+# CAVEAT — apiVersion skew: this uses v1alpha1 to match the pinned SDK (k8s-agent-sandbox==0.4.6, whose
+# constants + the SandboxClaim it writes are v1alpha1) and the version this repo verified the cluster
+# serves. Upstream HEAD examples already use v1beta1, so if AGENT_SANDBOX_VERSION=latest installs a CRD
+# that drops v1alpha1, either pin AGENT_SANDBOX_VERSION to a v1alpha1 release or bump the SDK to match.
+apiVersion: extensions.agents.x-k8s.io/v1alpha1
+kind: SandboxTemplate
+metadata:
+  name: multiplication-template
+  namespace: skyrl-sandboxes
+spec:
+  podTemplate:
+    spec:
+      # gVisor isolation + pin to the sandbox pool (same posture as the mini-swe backend).
+      runtimeClassName: gvisor
+      nodeSelector:
+        sandbox.gke.io/runtime: gvisor
+      tolerations:
+        - key: sandbox.gke.io/runtime
+          operator: Equal
+          value: gvisor
+          effect: NoSchedule
+      # Untrusted code must NOT receive a Kubernetes API token.
+      automountServiceAccountToken: false
+      restartPolicy: OnFailure
+      containers:
+        - name: sandbox
+          image: IMAGE_PLACEHOLDER # <-- build from examples/python-runtime-sandbox (see header); must serve :8888
+          # No `command:` override: the runtime image's own CMD starts the uvicorn :8888 server.
+          # (The mini-swe pod-exec backend uses `sleep infinity`; commands.run needs the live server.)
+          ports:
+            - containerPort: 8888
+          # Gate readiness on the server being up, so create_sandbox()'s Ready wait means commands.run
+          # will connect (mirrors the upstream python-sandbox-template). Drop if your image has no GET /.
+          readinessProbe:
+            httpGet:
+              path: "/"
+              port: 8888
+            initialDelaySeconds: 0
+            periodSeconds: 1
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+              ephemeral-storage: "1Gi"
+            limits:
+              cpu: "1"
+              memory: "2Gi"
+              ephemeral-storage: "4Gi"

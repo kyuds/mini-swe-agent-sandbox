@@ -10,7 +10,7 @@ It can run from your laptop (uses your kubeconfig; pod-exec is proxied by the AP
 in-cluster. The only cluster requirement is the agent-sandbox controller + CRDs (infra steps 01 + 04);
 the GPU pool and KubeRay are NOT needed.
 
-    uv run python scripts/smoke_test_agent_sandbox.py --namespace default
+    uv run python scripts/mini_swe_agent/smoke_test_agent_sandbox.py --namespace default
 
 Useful flags:
     --image IMG          container image (default python:3.11-slim; any image with bash works)
@@ -30,7 +30,7 @@ from k8s_agent_sandbox.k8s_helper import K8sHelper
 
 from minisweagent.environments import get_environment
 
-ENV_CLASS = "mini_swe_agent_sandbox.environment.AgentSandboxEnvironment"
+ENV_CLASS = "skyrl_sandbox.mini_swe_agent.environment.AgentSandboxEnvironment"
 
 _results: list[tuple[str, bool, str]] = []
 

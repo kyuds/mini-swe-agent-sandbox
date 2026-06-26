@@ -216,12 +216,12 @@ environment:
   # kubernetes-sigs/agent-sandbox backend (replaces docker/podman). Selected via mini-swe-agent's
   # dotted-path fallback in minisweagent.environments.get_environment. Requires the
   # `mini-swe-agent-sandbox` package to be installed (pip install -e .).
-  environment_class: "mini_swe_agent_sandbox.environment.AgentSandboxEnvironment"
+  environment_class: "skyrl_sandbox.mini_swe_agent.environment.AgentSandboxEnvironment"
   cwd: "/testbed"
   timeout: 180
   namespace: "skyrl-sandboxes"          # matches SANDBOX_NAMESPACE in infra/.env
   container_name: "sandbox"
-  # `image` is injected per-instance by get_sb_environment() in mini_swe_agent_sandbox/utils.py.
+  # `image` is injected per-instance by get_sb_environment() in skyrl_sandbox/mini_swe_agent/utils.py.
   sandbox_ready_timeout: 600            # SWE-bench images are large; allow time for pull + scheduling
   env:
     PAGER: cat

@@ -5,8 +5,8 @@
 #
 # Prereqs: ./infra/up-smoke.sh has run (cluster + agent-sandbox + RBAC), and kubectl points at it.
 #
-#   bash scripts/run_smoke_in_pod.sh                  # defaults
-#   SMOKE_ARGS="--gvisor" bash scripts/run_smoke_in_pod.sh   # pass flags through to the test
+#   bash scripts/mini_swe_agent/run_smoke_in_pod.sh                  # defaults
+#   SMOKE_ARGS="--gvisor" bash scripts/mini_swe_agent/run_smoke_in_pod.sh   # pass flags through to the test
 set -euo pipefail
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
@@ -43,5 +43,5 @@ kubectl -n "$RUNNER_NS" exec -i "$POD" -- bash -lc "
   set -e
   cd /workspace
   uv sync
-  uv run python scripts/smoke_test_agent_sandbox.py --namespace '$SANDBOX_NS' $GVISOR ${SMOKE_ARGS:-}
+  uv run python scripts/mini_swe_agent/smoke_test_agent_sandbox.py --namespace '$SANDBOX_NS' $GVISOR ${SMOKE_ARGS:-}
 "
