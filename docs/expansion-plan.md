@@ -119,11 +119,13 @@ reached behind `Trial.run()`. SkyRL integrates harbor purely at the **`Generator
 rev, Python ≥3.12, needs provider keys). That's a large, mostly-out-of-our-repo effort and does **not**
 exercise the agent-sandbox SDK (harbor would own execution).
 
-**Decision:** implement the multiplication example as a **SkyRL-gym `BaseTextEnv` whose execution goes
-through the agent-sandbox SDK** (`create_sandbox(warmpool=…)` + `commands.run`), driven by SkyRL's
-**default** generator. This is the path that actually exercises agent-sandbox + the SDK (the whole
-point), is entirely in-repo, and is the simplest thing that can run. It mirrors harbor's *architecture*
-(plug in at SkyRL's env/generator seam) without depending on harbor's internal provider API.
+**Decision:** implement the multiplication example as a **`BaseTextEnv` (sandbox execution via the
+agent-sandbox SDK: `create_sandbox(warmpool=…)` + `commands.run`) driven by a custom litellm-based
+generator** (`MultiplyGenerator`), **mirroring mini-swe**. This is what gives multiplication the *same
+suite* as mini-swe — the same `*_litellm_model_name` decouple, so the same generate-only-via-Fireworks
+and train-via-your-own-vLLM paths. (Originally it used SkyRL's default gym generator, but that calls
+`RemoteInferenceEngine`, which sends no auth header and so can't reach a hosted provider like Fireworks
+— so multiplication now uses litellm directly, exactly like mini-swe.)
 
 **Harbor, kept as a documented follow-up (so it can still be "tried"):** we scaffold a harbor
 **task directory** for multiply (`instruction.md` + `environment/Dockerfile` + `tests/test.sh`) under
@@ -144,11 +146,16 @@ the agent-sandbox SDK. See §2 caveats.
   `close()`. Demonstrates single-image + SDK exec with a trivial task.
 - `skyrl_sandbox/multiplication/dataset.py` — synthetic multiply parquet (port of
   `multiply_dataset.py`), `env_class="multiply_sandbox"`.
-- `skyrl_sandbox/multiplication/main.py` — training entrypoint: `register(id="multiply_sandbox",
-  entry_point="skyrl_sandbox.multiplication.env:MultiplySandboxEnv")` inside the Ray task, then
-  `BasePPOExp` (mirrors `main_multiply.py`).
-- `skyrl_sandbox/multiplication/generate.py` — generate-only variant (default generator + the env).
-- `configs/multiplication/multiply_sandbox.yaml` + `scripts/multiplication/run_*.sh`.
+- `skyrl_sandbox/multiplication/generator.py` — `MultiplyGenerator` + `MultiplyGeneratorConfig`
+  (mirrors mini-swe's): a Ray `init_and_run` builds the litellm model via `get_model` and drives
+  `MultiplySandboxEnv` (`init`/`step`/`close`); reuses mini-swe's tokenization / `GeneratorOutput`
+  shaping. `multiply_litellm_model_name` is the decouple (empty → `openai/<model.path>`).
+- `skyrl_sandbox/multiplication/main.py` — `MultiplyPPOExp(BasePPOExp).get_generator` → `MultiplyGenerator`
+  (no skyrl-gym `register`; the generator builds the env). Mirrors `mini_swe_agent/main.py`.
+- `skyrl_sandbox/multiplication/generate.py` — `MultiplyGenerateExp` (generate-only, mirrors
+  `mini_swe_agent/generate.py`).
+- `scripts/multiplication/run_generate_fireworks.sh` (Fireworks gen) + `run_multiply_sandbox.sh`
+  (train via your own vLLM) — the same pair mini-swe has.
 - `infra/manifests/sandbox-template-multiplication.yaml` — the **SandboxTemplate** (single image =
   the agent-sandbox runtime image that ships the `:8888` server; gVisor; no API token) +
   `infra/manifests/sandbox-warmpool-multiplication.yaml` — the **SandboxWarmPool** that references it
@@ -227,8 +234,9 @@ multiplication example.
    through the same code via `generator.miniswe_litellm_model_name`: empty → `openai/<model.path>` →
    `OPENAI_BASE_URL` = SkyRL's in-process **vLLM** (H100s, OpenAI-compatible) for *training* (litellm
    correctly tokenizes the real model); `fireworks_ai/…` → Fireworks for the no-GPU *generation* demo.
-   Keep `OPENAI_BASE_URL` (it's the training mechanism, not a hack). **Caveat — multiplication differs:**
-   it uses SkyRL's **default** generator (`RemoteInferenceEngine`), which posts to
-   `generator.inference_engine.remote_urls` and sends **no auth header** — so it can only hit a no-auth
-   vLLM (your own), **not** Fireworks/OpenAI. mini-swe (litellm) gets the hosted-provider path;
-   multiplication's demo is training (local vLLM) or generation against your own vLLM.
+   Keep `OPENAI_BASE_URL` (it's the training mechanism, not a hack). **Multiplication now matches:** it
+   has its own litellm generator (`MultiplyGenerator`, field `multiply_litellm_model_name`), so it gets
+   the *same* two backends (Fireworks gen + your-vLLM train). It no longer uses SkyRL's default gym
+   generator (whose `RemoteInferenceEngine` sends no auth header and so can't reach Fireworks). Both
+   examples are now the same shape: `BaseTextEnv`/mini-swe-Environment for sandbox execution + a custom
+   litellm generator for the LLM.

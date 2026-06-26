@@ -6,7 +6,12 @@ run ``python3 -c "print(a*b)"`` in an agent-sandbox ``Sandbox`` via the SDK's ``
 the sandbox's stdout as the source of truth. This exercises the single-image + SandboxTemplate +
 ``commands.run`` path end to end. See ``docs/expansion-plan.md`` §2.
 
-Selected via config: ``environment.env_class=multiply_sandbox`` (registered in ``main.py``).
+Driven directly by :class:`~skyrl_sandbox.multiplication.generator.MultiplyGenerator` — its per-trajectory
+rollout calls ``init`` (create the sandbox) / ``step`` (verify) / ``close`` (delete). No skyrl-gym
+registration (the custom generator builds this env itself, the same pattern as mini-swe). The sandbox
+knobs (``MultiplicationSandboxConfig``: warmpool, namespace, in_cluster, …) currently use defaults —
+the generator constructs the env with ``env_config={}`` (a laptop/local-Ray run needs ``in_cluster=False``,
+which would require threading that through).
 
 NOTE: the task itself doesn't *need* a sandbox (the reward is trivial); running the check in the pod
 is the point — it demonstrates the agent-sandbox SDK execution path. A tool-use variant (model issues
