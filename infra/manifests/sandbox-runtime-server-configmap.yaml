@@ -19,6 +19,8 @@ metadata:
   name: sandbox-runtime-server
   namespace: skyrl-sandboxes
 data:
+  # Note implementation is not from the official example, which requires FastAPI. This server is
+  # for demo use-cases only.
   server.py: |
     """Stdlib implementation of the agent-sandbox :8888 runtime contract (POST /execute, GET /)."""
     import json

@@ -11,8 +11,6 @@ high-level API:
 * execute via ``sandbox.commands.run(...)`` -> ``ExecutionResult(stdout, stderr, exit_code)``, which
   POSTs to the in-image ``:8888`` runtime server.
 
-See ``docs/expansion-plan.md`` §2 and ``docs/agent-sandbox-research.md``.
-
 **CAVEAT (blocker until set):** the SandboxTemplate's image (referenced by the warm pool) MUST ship the
 agent-sandbox ``:8888`` runtime server — that's what ``commands.run`` talks to. See
 ``infra/manifests/sandbox-template-multiplication.yaml`` (image placeholder) +

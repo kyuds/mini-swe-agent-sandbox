@@ -1,8 +1,8 @@
 """A mini-swe-agent ``Environment`` backed by kubernetes-sigs/agent-sandbox.
 
-Drop-in replacement for mini-swe-agent's ``DockerEnvironment``: instead of ``podman run`` +
-``podman exec`` on the local host, each SWE-bench box is an agent-sandbox ``Sandbox`` pod on a
-Kubernetes cluster, and commands run via the Kubernetes **pod-exec** API.
+Drop-in replacement for SkyRL mini-swe-agent example's ``DockerEnvironment``: instead of
+``podman run`` + ``podman exec`` on the local host, each SWE-bench box is an agent-sandbox
+``Sandbox`` pod on a Kubernetes cluster, and commands run via the Kubernetes **pod-exec** API.
 
 Selected purely by config via mini-swe-agent's dotted-path env factory (no SkyRL/mini-swe-agent
 source changes)::
@@ -13,7 +13,7 @@ source changes)::
 This module is the **mini-swe-agent adapter**: it owns the config schema and the ``Environment``
 protocol (``execute``/``cleanup``/``serialize``). All Kubernetes + agent-sandbox-SDK plumbing —
 creating the ``Sandbox`` CR, waiting for Ready, pod-exec, deletion — lives in :mod:`kubernetes_util`
-(:class:`~skyrl_sandbox.mini_swe_agent.kubernetes_util.KubernetesSandbox`). See docs/expansion-plan.md.
+(:class:`~skyrl_sandbox.mini_swe_agent.kubernetes_util.KubernetesSandbox`).
 
 * **Contract.** mini-swe-agent 1.x calls ``execute(command: str, ...) -> {"output", "returncode"}``.
   We mirror that, and accept the 2.x ``execute(action: dict)`` form defensively. The RL reward is the

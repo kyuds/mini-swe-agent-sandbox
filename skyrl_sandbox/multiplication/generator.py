@@ -10,7 +10,7 @@ sends no auth header, so it can't reach a keyed provider like Fireworks.)
 Each trajectory drives :class:`~skyrl_sandbox.multiplication.env.MultiplySandboxEnv` directly (it creates
 the agent-sandbox Sandbox, verifies the product via the SDK's commands.run, and is deleted on close).
 
-Status: untested on a cluster; shares mini-swe's generate-only caveats (docs/expansion-plan.md §5).
+Status: untested on a cluster; shares mini-swe's generate-only caveats.
 """
 
 import asyncio
@@ -156,6 +156,7 @@ class MultiplyGenerator(SkyRLGymGenerator):
         sampling_params = get_sampling_params_for_backend(
             self.generator_cfg.inference_engine.backend, self.generator_cfg.sampling_params
         )
+        # TODO (kyuds): gate this behind a flag.
         # SkyRL only knows the 'vllm' backend, so it always emits vLLM-only sampling params. When the LLM
         # is reached via litellm against a hosted OpenAI-compatible API (Fireworks), those are rejected
         # ("Extra inputs are not permitted"), and vLLM sentinels are out of range (top_k=-1 means "no

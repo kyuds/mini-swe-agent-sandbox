@@ -1,21 +1,7 @@
 """Generate-only entrypoint for the mini-swe-agent example (rollouts, NO training).
 
-Runs ONLY the SkyRL generator against an OpenAI-compatible endpoint, so you can validate the
-mini-swe-agent + agent-sandbox path end-to-end **without GPUs or weight updates**:
-
-* the LLM is called by litellm via ``OPENAI_BASE_URL`` (point it at a remote endpoint -> no local vLLM/GPU);
-* the agent's bash runs in agent-sandbox ``Sandbox`` pods via ``AgentSandboxEnvironment``;
-* Ray is initialised in-process (local mode) -- no KubeRay cluster needed.
-
-This merges two shipped SkyRL patterns: ``skyrl/train/entrypoints/main_generate.py``
-(``EvalOnlyEntrypoint`` -- builds only the inference client + generator and calls ``evaluate``) and
-``examples/train/mini_swe_agent/main_mini_swe.py`` (``MiniSWEPPOExp.get_generator`` -- builds the
-``MiniSweAgentGenerator``). SkyRL ships no mini-swe generate-only entrypoint, so we provide one.
-
-Run via ``scripts/mini_swe_agent/run_generate_fireworks.sh`` (Qwen via Fireworks). See
-``docs/expansion-plan.md`` §1 and its caveats (``model.path`` loads the tokenizer and is decoupled from
-the served model via ``generator.miniswe_litellm_model_name``; ``run_engines_locally=false`` +
-``colocate_all=false`` to avoid a GPU placement group).
+Runs ONLY the SkyRL generator against an LiteLLM-compatible endpoint, so you can validate the
+mini-swe-agent + agent-sandbox path end-to-end **without GPUs or weight updates**.
 """
 
 import asyncio

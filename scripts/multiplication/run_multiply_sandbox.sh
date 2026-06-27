@@ -3,7 +3,7 @@
 # Uses the custom litellm generator (MultiplyGenerator), mirroring the mini-swe training path: the policy
 # is served by SkyRL's in-process vLLM (OpenAI-compatible HTTP), reached via litellm openai/<model.path>
 # -> OPENAI_BASE_URL below. Each rollout adopts a Sandbox from "multiplication-pool" and verifies the
-# product via the SDK's commands.run. See docs/expansion-plan.md §2/§9.
+# product via the SDK's commands.run.
 #
 # Prereqs:
 #   - cluster up (infra/up.sh) with a GPU pool + the gVisor sandbox pool + extensions CRDs.

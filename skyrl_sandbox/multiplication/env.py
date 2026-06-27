@@ -4,7 +4,7 @@ Port of SkyRL's ``examples/train/multiply/env.py`` (``MultiplyEnv``). The task i
 must answer ``{a} * {b}`` in ``\\boxed{...}`` — but instead of computing the product in pure Python, we
 run ``python3 -c "print(a*b)"`` in an agent-sandbox ``Sandbox`` via the SDK's ``commands.run`` and use
 the sandbox's stdout as the source of truth. This exercises the single-image + SandboxTemplate +
-``commands.run`` path end to end. See ``docs/expansion-plan.md`` §2.
+``commands.run`` path end to end.
 
 Driven directly by :class:`~skyrl_sandbox.multiplication.generator.MultiplyGenerator` — its per-trajectory
 rollout calls ``init`` (create the sandbox) / ``step`` (verify) / ``close`` (delete). No skyrl-gym

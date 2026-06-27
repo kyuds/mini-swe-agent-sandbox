@@ -3,16 +3,13 @@ name = "skyrl-sandbox"
 version = "0.1.0"
 description = "Run SkyRL RL workloads (mini-swe-agent SWE-bench; a toy multiplication task) on kubernetes-sigs/agent-sandbox instead of Podman."
 readme = "README.md"
-# 3.12+: the copied mini_swe_agent/utils.py uses a 3.12-only nested-quote f-string, and the fsdp stack
-# (flash-attn wheel) targets cp312. uv then auto-selects 3.12 for the venv.
 requires-python = ">=3.12"
 dependencies = [
     # Pin to 0.5.x (lock the minor, allow patch only): 0.5.0 was a breaking change vs 0.4.x — GVK moved
     # v1alpha1 -> v1beta1, and SandboxClient.create_sandbox switched from template-based to warmpool-based
     # (create_sandbox(warmpool=...): claim -> SandboxWarmPool -> SandboxTemplate, plus pod_labels/
     # pod_annotations). The multiplication backend + manifests + docs target this 0.5.x warmpool/v1beta1
-    # model. The cluster's AGENT_SANDBOX_VERSION controller must serve v1beta1 to match. See
-    # docs/expansion-plan.md §5 and docs/agent-sandbox-research.md.
+    # model. The cluster's AGENT_SANDBOX_VERSION controller must serve v1beta1 to match.
     "k8s-agent-sandbox>=0.5.0,<0.6",
     "kubernetes>=27.2.0",
     "mini-swe-agent>=1.12.0,<2",
@@ -21,11 +18,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# For full RL training.
 fsdp = ["skyrl[fsdp]"]
-# Lighter tier for generate-only runs: skyrl-train deps (ray, skyrl-gym, transformers, hydra) WITHOUT
-# the vllm/torch-pin/flashinfer inference stack. Generation takes tokens from litellm (Fireworks) with
-# run_engines_locally=false, so vllm is never started -- only needs to be importable, which it isn't on
-# this path. Use for the no-GPU generation demo; training still needs [fsdp].
+# Lighter tier for generate-only runs.
 train = ["skyrl[skyrl-train]"]
 
 [build-system]

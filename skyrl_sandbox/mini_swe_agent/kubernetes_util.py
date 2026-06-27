@@ -7,8 +7,6 @@ lifecycle::
 
     create the Sandbox CR  →  wait for Ready  →  resolve its pod  →  pod-exec  →  delete the CR
 
-Design (rationale in docs/expansion-plan.md):
-
 * **Uses the agent-sandbox SDK for lifecycle, not spawn-by-template.** We build on the SDK's
   ``K8sHelper`` (its in/out-of-cluster config + API clients + tested readiness watch) and its
   ``constants`` so the Sandbox GVK always tracks the installed CRD (currently

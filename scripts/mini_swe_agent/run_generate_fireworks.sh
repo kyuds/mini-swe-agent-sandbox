@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Generate-only run of the mini-swe-agent example against FIREWORKS (NO training, NO GPUs), via
-# litellm's NATIVE fireworks_ai provider -- no OPENAI_* hijack. The agent's bash runs in agent-sandbox
-# pods via AgentSandboxEnvironment; Ray runs in-process (local mode). See docs/expansion-plan.md §1.
+# litellm's native fireworks_ai provider. The agent's bash runs in agent-sandbox pods via
+# AgentSandboxEnvironment; Ray runs in-process (local mode).
 #
 # Prereqs:
 #   - agent-sandbox cluster up (infra/up-smoke.sh is enough -- no GPU pool) + kubectl context set, OR run
@@ -35,10 +35,11 @@ export _SKYRL_USE_NEW_INFERENCE=0
 # ray`). Disabling it makes Ray workers reuse this already-installed .venv and inherit our env vars.
 export RAY_ENABLE_UV_RUN_RUNTIME_ENV=0
 
+# TODO (kyuds): model and tokenizer inconsistent. Works well though. Investigate, same for multiplication.
 TOKENIZER="${TOKENIZER:-Qwen/Qwen3-4B}"   # HF id -> tokenizer (model.path)
 # Fireworks model id -- VERIFY it exists in your catalog (https://fireworks.ai/models); override with
 # FW_MODEL=... if your slug differs (the tokenizer above stays the same regardless).
-FW_MODEL="${FW_MODEL:-accounts/fireworks/models/qwen3-4b}"
+FW_MODEL="${FW_MODEL:-accounts/fireworks/models/gpt-oss-20b}"
 DATA_DIR="${DATA_DIR:-$HOME/data/swe_gym_subset}"
 CONFIG="${CONFIG:-$REPO_DIR/configs/mini_swe_agent/swebench_agent_sandbox.yaml}"
 

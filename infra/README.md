@@ -1,17 +1,13 @@
-# infra/ — GKE cluster for skyrl-sandbox (mini-swe-agent + multiplication) on agent-sandbox
+# GKE Infra for skyrl-sandbox
 
-Provisions a GKE Standard cluster wired for SkyRL-style agentic RL: KubeRay drives
+Provisions a standard GKE cluster wired for SkyRL-style agentic RL: KubeRay drives
 the training/inference cluster on GPUs, and `agent-sandbox` runs untrusted
-SWE-bench command execution in gVisor-isolated pods. Everything is plain `bash` +
-`gcloud`/`kubectl`/`helm` — no Terraform.
-
-> **These scripts cost money** (GPU + gVisor nodes, and GPUs need quota). They are
-> written to be read and run later; nothing here has been executed.
+SWE-bench command execution in gVisor-isolated pods.
 
 ## Topology
 
 ```
-GKE Standard cluster (one control plane, VPC-native → flat pod networking)
+GKE cluster (one control plane, VPC-native → flat pod networking)
 ├─ default-pool          e2-standard-4  ×1     system pods + kuberay-operator + agent-sandbox controller
 ├─ kuberay-gpu-pool      g2/a3 + GPUs   0..N    Ray head/workers   (taint: workload=ray-gpu, + GKE GPU taint)
 └─ sandbox-gvisor-pool   e2-standard-8  1..N    Sandbox pods       (gVisor; taint: sandbox.gke.io/runtime=gvisor)
