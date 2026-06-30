@@ -1,12 +1,10 @@
 # skyrl-sandbox
 
 Run [SkyRL](https://github.com/NovaSky-AI/SkyRL) RL workloads on the
-[kubernetes-sigs/agent-sandbox](https://github.com/kubernetes-sigs/agent-sandbox) backend (GKE) —
-each rollout's sandbox is an isolated (gVisor) `Sandbox` pod instead of a local Podman/Docker
-container. SkyRL is a pip dependency; the SkyRL repo is never modified (its example code is copied in
-and edited).
+[kubernetes-sigs/agent-sandbox](https://github.com/kubernetes-sigs/agent-sandbox) backend (GKE) for environment rollouts. Each rollout occurs in a gvisor-isolated gke sandbox.
 
-Two examples, one per package folder — they sit at **opposite ends** of the agent-sandbox design space:
+The repo contains two examples, one per package folder, that use **agent-sandbox** in two different ways:
+
 
 | | [`skyrl_sandbox/mini_swe_agent`](skyrl_sandbox/mini_swe_agent) | [`skyrl_sandbox/multiplication`](skyrl_sandbox/multiplication) |
 |---|---|---|
@@ -16,11 +14,7 @@ Two examples, one per package folder — they sit at **opposite ends** of the ag
 | execute | Kubernetes **pod-exec** | SDK **`commands.run`** (in-image `:8888`) |
 | needs `:8888` runtime image? | no | **yes** |
 
-The *why* behind the two backends is in [`docs/agent-sandbox-research.md`](docs/agent-sandbox-research.md)
-(template-less create + warm-pool research); the full design + caveats are in
-[`docs/expansion-plan.md`](docs/expansion-plan.md). The mini-swe backend's design lives in the module
-docstrings ([`environment.py`](skyrl_sandbox/mini_swe_agent/environment.py),
-[`kubernetes_util.py`](skyrl_sandbox/mini_swe_agent/kubernetes_util.py)).
+The sandbox backends for mini-swe-agent and multiplication are different due to how warmpools work in agent-sandbox. In a simple sense, agent-sandbox allows users to create a warmpool of sandboxes of a certain docker image and reuses them for agent rollouts. Mini-swe-agent has a separate docker image per environment, so this model of using an SDK cannot be used. Instead, raw Kubernetes APIs have to be used to operate with sandboxes.
 
 Across both, the Ray workers (driving the sandboxes) hold the Kubernetes identity/RBAC; the sandbox
 pods run untrusted model code with **no** API token and gVisor isolation (`infra/05-setup-rbac.sh`).
@@ -80,14 +74,11 @@ via `create_sandbox(warmpool=…)` and computes/verifies the product with the SD
 **Same LLM suite as mini-swe:** multiplication has a custom litellm-based generator
 ([`generator.py`](skyrl_sandbox/multiplication/generator.py), `MultiplyGenerator`), so the same
 `*_litellm_model_name` decouple gives it both backends — **Fireworks** generation (`fireworks_ai/…`) and
-**your-own-vLLM** training (`openai/<model.path>` + `OPENAI_BASE_URL`). (It no longer uses SkyRL's
-default gym generator, whose `RemoteInferenceEngine` can't auth to a hosted provider.)
+**your-own-vLLM** training (`openai/<model.path>` + `OPENAI_BASE_URL`).
+
 **Caveat:** the template image must ship the agent-sandbox `:8888` runtime server (left as a placeholder
 in the manifest on purpose — there is no published default; build it from agent-sandbox's
-`examples/python-runtime-sandbox/`) — see
-[`docs/expansion-plan.md`](docs/expansion-plan.md) §5. *(harbor was researched as the harness; it owns
-execution internally and would need a custom agent-sandbox provider, so we mirror its `GeneratorInterface`
-architecture instead — see the plan §2.)*
+`examples/python-runtime-sandbox/`).
 
 ## Testing the agent-sandbox part (no GPUs)
 
